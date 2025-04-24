@@ -6,11 +6,16 @@ import argparse # Import moved to top
 import os # Needed for checking file existence
 
 class BirdCropper:
-    # Renamed process_one to process_single
-    def __init__(self, model_path="yolov8n.pt", process_single=True):
+    def __init__(self, model_path="yolov8n.pt", process_single=True, sort_by="size"):
         self.model = YOLO(model_path)
         self.class_id = 14  # COCO class ID for 'bird'
         self.process_single = process_single # Store the option
+        self.sort_by = sort_by # Store the sorting preference
+
+    # Helper function to calculate bounding box area
+    def _calculate_area(self, box):
+        x1, y1, x2, y2 = box
+        return (x2 - x1) * (y2 - y1)
 
     def detect_and_crop(self, img_path, output_dir, conf=0.5):
         img_path_obj = Path(img_path) # Work with Path object for consistency
@@ -24,70 +29,82 @@ class BirdCropper:
         results = self.model.predict(source=img, conf=conf, verbose=False)
 
         crops = []
+        # Process results - gather all potential bird detections first
+        all_detections = []
         for r in results:
             boxes = r.boxes.xyxy.cpu().numpy()
             classes = r.boxes.cls.cpu().numpy()
             confidences = r.boxes.conf.cpu().numpy()
 
-            detections = []
             for box, cls, conf_score in zip(boxes, classes, confidences):
                  if int(cls) == self.class_id:
-                    detections.append({'box': box, 'conf': conf_score})
+                    all_detections.append({'box': box, 'conf': conf_score})
 
-            # Optional sorting if you want the *highest confidence* single bird
-            # if self.process_single and detections:
-            #    detections = sorted(detections, key=lambda x: x['conf'], reverse=True)
+        # --- Sorting Logic ---
+        if not all_detections:
+            print(f"No birds detected in {img_path_obj.name} with confidence >= {conf}.") # More specific message
+            return [] # No need to proceed if no birds found
 
-            for i, det in enumerate(detections):
-                box = det['box']
-                x1, y1, x2, y2 = map(int, box)
-                # Ensure coordinates are valid
-                x1, y1 = max(0, x1), max(0, y1)
-                x2, y2 = min(img.shape[1], x2), min(img.shape[0], y2)
+        if self.sort_by == "confidence":
+            # Sort by confidence score, highest first
+            all_detections.sort(key=lambda x: x['conf'], reverse=True)
+            print("Sorting detections by confidence (highest first).")
+        elif self.sort_by == "size":
+            # Sort by bounding box area, largest first
+            all_detections.sort(key=lambda x: self._calculate_area(x['box']), reverse=True)
+            print("Sorting detections by size (largest first).")
+        # Add else or error handling if needed for invalid sort_by values,
+        # though argparse choices should prevent this.
 
-                # Ensure crop area is valid
-                if x1 >= x2 or y1 >= y2:
-                    print(f"Warning: Invalid crop dimensions for {img_path_obj.name}, skipping.")
-                    continue
+        # --- Cropping and Saving Logic ---
+        # Now iterate through the *sorted* detections
+        for i, det in enumerate(all_detections):
+            box = det['box']
+            x1, y1, x2, y2 = map(int, box)
+            # Ensure coordinates are valid
+            x1, y1 = max(0, x1), max(0, y1)
+            x2, y2 = min(img.shape[1], x2), min(img.shape[0], y2)
 
-                crop = img[y1:y2, x1:x2]
+            # Ensure crop area is valid
+            if x1 >= x2 or y1 >= y2:
+                print(f"Warning: Invalid crop dimensions calculated for a detection in {img_path_obj.name}, skipping.")
+                continue
 
-                # --- Filename Logic ---
-                base_stem = img_path_obj.stem
-                if self.process_single:
-                    # Default filename for single mode
-                    crop_filename = f"{base_stem}.jpg"
+            crop = img[y1:y2, x1:x2]
+
+            # --- Filename Logic ---
+            base_stem = img_path_obj.stem
+            if self.process_single:
+                # Default filename for single mode (now refers to the top sorted item)
+                crop_filename = f"{base_stem}.jpg"
+                crop_path = output_dir_obj / crop_filename
+                # Check if it exists ONLY if we are in single mode
+                if crop_path.exists():
+                    # If the simple name exists, fall back to indexed name (using index 0)
+                    print(f"Warning: File {crop_path} already exists. Using indexed name.")
+                    crop_filename = f"{base_stem}_crop_0.jpg" # Use index 0 for the single best
                     crop_path = output_dir_obj / crop_filename
-                    # Check if it exists ONLY if we are in single mode
-                    if crop_path.exists():
-                        # If the simple name exists, fall back to indexed name
-                        print(f"Warning: File {crop_path} already exists. Using indexed name.")
-                        crop_filename = f"{base_stem}_crop_{i}.jpg"
-                        crop_path = output_dir_obj / crop_filename
-                else:
-                    # Always use index if processing multiple
-                    crop_filename = f"{base_stem}_crop_{i}.jpg"
-                    crop_path = output_dir_obj / crop_filename
-                # --- End Filename Logic ---
+            else:
+                # Always use index if processing multiple (index reflects sorted order)
+                crop_filename = f"{base_stem}_crop_{i}.jpg"
+                crop_path = output_dir_obj / crop_filename
+            # --- End Filename Logic ---
 
-                try:
-                    cv2.imwrite(str(crop_path), crop)
-                    crops.append(crop_path)
-                    print(f"Saved crop to: {crop_path}") # Added print for clarity
-                except Exception as e:
-                    print(f"Error writing crop file {crop_path}: {e}")
+            try:
+                cv2.imwrite(str(crop_path), crop)
+                crops.append(crop_path)
+                print(f"Saved crop to: {crop_path} (Confidence: {det['conf']:.2f}, Size: {self._calculate_area(det['box']):.0f}px)") # Added details
+            except Exception as e:
+                print(f"Error writing crop file {crop_path}: {e}")
 
-                # If process_single is True, break after processing the first bird
-                if self.process_single:
-                    break # Exit the inner loop after the first bird crop
+            # If process_single is True, break after processing the first bird (the highest ranked one)
+            if self.process_single:
+                break # Exit the loop after the first bird crop
 
-            # If process_single is True, we can also break the outer loop
-            if self.process_single and crops:
-                 break # Exit the outer loop ('for r in results:')
+        # No need for the outer break anymore as we process all_detections in one go
 
         return crops
 
-# Keep the rest of the file (__main__ block) as it was in the previous version
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Detect and crop birds from an image.")
@@ -99,6 +116,8 @@ if __name__ == "__main__":
     # Using '--multiple' as the flag to turn OFF single mode is clearer
     parser.add_argument("--multiple", dest='single', action='store_false', help="Process and save all detected birds (use indexed filenames). Default is to process only one bird (use simpler filename if possible).")
     # The default value for 'single' is implicitly True because of action='store_false'
+    # --- Add sortby argument ---
+    parser.add_argument("--sortby", type=str, default="size", choices=["confidence", "size"], help="Criterion to sort multiple detections before cropping. 'confidence' sorts by detection confidence (highest first), 'size' sorts by bounding box area (largest first). Affects which bird is chosen in single mode. Default: size.")
 
     args = parser.parse_args()
 
@@ -117,10 +136,11 @@ if __name__ == "__main__":
     print(f"Output directory: {args.output}")
     print(f"Model path: {args.model}")
     print(f"Confidence threshold: {args.conf}")
-    print(f"Process only a single bird: {args.single}") # Print the value being used (using the new name)
+    print(f"Process only a single bird: {args.single}")
+    print(f"Sort detections by: {args.sortby}") # Print the sorting method
 
-    # Pass the model path and the boolean flag to the constructor using the new name
-    cropper = BirdCropper(model_path=args.model, process_single=args.single)
+    # Pass the model path, boolean flag, and sortby choice to the constructor
+    cropper = BirdCropper(model_path=args.model, process_single=args.single, sort_by=args.sortby)
 
     output_path_obj.mkdir(parents=True, exist_ok=True) # Use parents=True to create intermediate dirs
 
@@ -129,8 +149,10 @@ if __name__ == "__main__":
     cropped_files = cropper.detect_and_crop(str(input_path_obj), str(output_path_obj), conf=args.conf)
 
     if cropped_files:
-        print(f"Successfully saved {len(cropped_files)} cropped image(s) to {args.output}:")
+        print(f"\nSuccessfully saved {len(cropped_files)} cropped image(s) to {args.output}:")
         for file in cropped_files:
             print(f"- {file.name}") # file is already a Path object
     else:
-        print("No birds detected or cropped.")
+        # Message moved inside detect_and_crop for better context
+        print("\nNo birds were ultimately saved.")
+
