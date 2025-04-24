@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
 # run_birdcrop.py
+#!/usr/bin/env python3
 """
 Command-line script to detect and crop objects from images using the birdcrop library.
 """
@@ -8,11 +8,14 @@ import argparse
 import logging
 import time
 import os
+import sys # Import sys for exiting
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Tuple, Set, Dict, Any
 
 # Import from the library
+# Need YOLO directly for --list-classes if BirdCropper fails early
+from ultralytics import YOLO
 from birdcrop import BirdCropper, find_image_files
 # from birdcrop.exceptions import BirdCropError
 
@@ -41,13 +44,39 @@ def parse_classes_arg(classes_str: str) -> List[str | int]:
             items.append(item)
     return items
 
+# --- New Function: List Classes ---
+def list_model_classes(model_path: str):
+    """Loads a model and prints its class IDs and names."""
+    logger.info(f"Loading model '{model_path}' to list classes...")
+    try:
+        model = YOLO(model_path)
+        if not hasattr(model, 'names') or not isinstance(model.names, dict):
+            logger.error(f"Model '{model_path}' loaded, but class names (model.names) are missing or not in the expected dictionary format.")
+            sys.exit(1)
+
+        print(f"\nClasses available in model '{model_path}':")
+        print("-" * 40)
+        # Sort by ID for consistent output
+        for class_id, class_name in sorted(model.names.items()):
+            print(f"  ID: {class_id:<5} Name: {class_name}")
+        print("-" * 40)
+        sys.exit(0) # Exit successfully after listing
+
+    except FileNotFoundError:
+        logger.error(f"Model file not found: {model_path}")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"Failed to load model '{model_path}' or access class names: {e}", exc_info=True)
+        sys.exit(1)
+
+
 def main():
     """Parses arguments and runs the bird cropping process."""
     default_workers = min(8, os.cpu_count() + 4 if os.cpu_count() else 4)
 
     # --- Default Output Templates ---
     default_output_template = "{p.parent}/{category}/{p.stem}_crop_{nr}.jpg"
-    default_single_output_template = "{p.parent}/cropped/{p.stem}.jpg" # Keep simple for single
+    default_single_output_template = "{p.parent}/cropped/{p.stem}.jpg"
 
     parser = argparse.ArgumentParser(
         description="Detect and crop objects from images using the birdcrop library.",
@@ -56,7 +85,7 @@ def main():
     # --- Input Arguments ---
     parser.add_argument(
         "inputs", nargs='*',
-        help="Paths to input image files or directories."
+        help="Paths to input image files or directories. Required unless --list-classes is used."
     )
     parser.add_argument(
         "--input", "-i", type=str, action='append', default=[],
@@ -68,10 +97,11 @@ def main():
     )
     # --- Output Arguments ---
     parser.add_argument(
-        "--output-template", "-o", type=str, # Default set later based on --single
+        "--output-template", "-o", type=str,
         help="Output path template (Python str.format_map syntax). "
              "Available keys include: p, stat, exif, box, cls (id), conf, size, "
-             "x1, y1, x2, y2, nr, width, height, margin, category (name), etc. "
+             "x1, y1, x2, y2, nr (overall crop #), pcnr (per-category crop #), " # Added pcnr
+             "width, height, margin, category (name), etc. "
              "Relative paths are anchored to the input image's directory. "
              f"Default for multiple crops: '{default_output_template}'. "
              f"Default for single crop: '{default_single_output_template}'."
@@ -91,10 +121,14 @@ def main():
     )
     # --- Class Specification ---
     parser.add_argument(
-        "--classes", type=str, default="bird", # Default to bird
+        "--classes", type=str, default="bird",
         help='Comma-separated list of class names (e.g., "person,cat,dog") or '
              'class IDs (e.g., "0,15,16") to detect. Names are matched against '
              'the loaded model\'s class list.'
+    )
+    parser.add_argument(
+        "--list-classes", action="store_true", # New argument
+        help="List the classes available in the specified --model and exit."
     )
     parser.add_argument(
         "--margin", type=int, default=0,
@@ -120,17 +154,10 @@ def main():
 
     args = parser.parse_args()
 
-    # --- Set default output template based on single/multiple mode ---
-    if args.output_template is None:
-        if args.single:
-            args.output_template = default_single_output_template
-        else:
-            args.output_template = default_output_template
-
-    # --- Parse --classes argument ---
-    target_classes_input = parse_classes_arg(args.classes)
-    if not target_classes_input:
-        parser.error("No target classes specified or parsed from --classes argument.")
+    # --- Handle --list-classes early ---
+    if args.list_classes:
+        list_model_classes(args.model)
+        # The function exits, so code below won't run if --list-classes is used.
 
     # --- Adjust Log Level ---
     log_level = logging.INFO
@@ -142,10 +169,24 @@ def main():
     if log_level == logging.DEBUG:
         logger.debug("Debug logging enabled.")
 
-    # --- Validate and Find Inputs ---
+    # --- Set default output template (now that we know we're not listing classes) ---
+    if args.output_template is None:
+        if args.single:
+            args.output_template = default_single_output_template
+        else:
+            args.output_template = default_output_template
+
+    # --- Parse --classes argument ---
+    target_classes_input = parse_classes_arg(args.classes)
+    if not target_classes_input:
+        # This check is now only relevant if not listing classes
+        parser.error("No target classes specified or parsed from --classes argument.")
+
+    # --- Validate and Find Inputs (only if not listing classes) ---
     all_input_paths_str = args.inputs + args.input
     if not all_input_paths_str:
-        parser.error("No input files or directories specified.")
+        parser.error("No input files or directories specified (and --list-classes not used).")
+
     logger.info("Searching for image files...")
     image_files_to_process = find_image_files(all_input_paths_str, args.recursive)
     if not image_files_to_process:
@@ -155,12 +196,11 @@ def main():
     # --- Log Configuration ---
     logger.info(f"Processing {len(image_files_to_process)} image(s).")
     logger.info(f"Using model: {args.model}")
-    # Log the requested classes
     logger.info(f"Target classes: {args.classes}")
     logger.info(f"Confidence threshold: {args.conf}")
     logger.info(f"Margin: {args.margin}px")
     logger.info(f"Process single best detection per image: {args.single}")
-    if args.single or len(target_classes_input) > 1: # Also log sort if multiple classes targeted
+    if args.single or len(target_classes_input) > 1:
         logger.info(f"Sorting criterion: {args.sortby}")
     logger.info(f"Output template: {args.output_template}")
     logger.info(f"Force overwrite: {args.force}")
@@ -171,21 +211,19 @@ def main():
         logger.info("Loading detection model...")
         cropper = BirdCropper(
             model_path=args.model,
-            target_classes=target_classes_input, # Pass the parsed list
+            target_classes=target_classes_input,
             process_single=args.single,
             sort_by=args.sortby,
             margin=args.margin
         )
-        # Log the actual IDs being targeted after initialization
         logger.info(f"Model '{args.model}' loaded. Targeting class IDs: {sorted(list(cropper.target_class_ids))}")
-
-    except ValueError as e: # Catch specific init errors (like invalid sort_by/margin)
+    except ValueError as e:
         logger.error(f"Configuration error: {e}")
         exit(1)
-    except FileNotFoundError as e: # Specific error for model not found
+    except FileNotFoundError as e:
          logger.error(f"Model file not found: {e}")
          exit(1)
-    except Exception as e: # Catch other model loading errors
+    except Exception as e:
         logger.error(f"Failed to initialize BirdCropper: {e}", exc_info=log_level <= logging.DEBUG)
         logger.error("Exiting due to model loading/initialization failure.")
         exit(1)
