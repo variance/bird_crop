@@ -10,7 +10,7 @@ import time
 import os
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Tuple, Set, Dict, Any # Added Dict, Any
+from typing import List, Tuple, Set, Dict, Any
 
 # Import from the library
 from birdcrop import BirdCropper, find_image_files
@@ -23,22 +23,34 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 # logging.getLogger("ultralytics").setLevel(logging.WARNING)
-logger = logging.getLogger("run_birdcrop") # Use a specific name
+logger = logging.getLogger("run_birdcrop")
 
 
-# Removed prepare_tasks function - no longer needed
+def parse_classes_arg(classes_str: str) -> List[str | int]:
+    """Parses the comma-separated --classes argument into a list of strings/ints."""
+    if not classes_str:
+        return []
+    items = []
+    for item in classes_str.split(','):
+        item = item.strip()
+        if not item:
+            continue
+        if item.isdigit():
+            items.append(int(item))
+        else:
+            items.append(item)
+    return items
 
 def main():
     """Parses arguments and runs the bird cropping process."""
     default_workers = min(8, os.cpu_count() + 4 if os.cpu_count() else 4)
 
-    # --- Default Output Template ---
-    # A sensible default that puts crops in a 'cropped' subdir relative to the input
-    default_output_template = "{p.parent}/cropped/{p.stem}_crop_{nr}.jpg"
-    default_single_output_template = "{p.parent}/cropped/{p.stem}.jpg"
+    # --- Default Output Templates ---
+    default_output_template = "{p.parent}/{category}/{p.stem}_crop_{nr}.jpg"
+    default_single_output_template = "{p.parent}/cropped/{p.stem}.jpg" # Keep simple for single
 
     parser = argparse.ArgumentParser(
-        description="Detect and crop objects (e.g., birds) from images using the birdcrop library.",
+        description="Detect and crop objects from images using the birdcrop library.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     # --- Input Arguments ---
@@ -56,14 +68,13 @@ def main():
     )
     # --- Output Arguments ---
     parser.add_argument(
-        "--output-template", "-o", type=str, default=default_output_template,
+        "--output-template", "-o", type=str, # Default set later based on --single
         help="Output path template (Python str.format_map syntax). "
-             "Available keys include: p (input Path object), stat (os.stat object), "
-             "exif (dict), box, cls, conf, size, x1, y1, x2, y2 (detection details), "
-             "nr (crop number), width, height (crop dimensions), margin, "
-             "st_size, st_mtime, DateTimeOriginal, Make, Model, etc. "
+             "Available keys include: p, stat, exif, box, cls (id), conf, size, "
+             "x1, y1, x2, y2, nr, width, height, margin, category (name), etc. "
              "Relative paths are anchored to the input image's directory. "
-             "Default suffix is .jpg if not specified in template."
+             f"Default for multiple crops: '{default_output_template}'. "
+             f"Default for single crop: '{default_single_output_template}'."
     )
     parser.add_argument(
         "--force", "-f", action="store_true",
@@ -78,9 +89,12 @@ def main():
         "--conf", type=float, default=0.5,
         help="Confidence threshold for detection (0.0 to 1.0)."
     )
+    # --- Class Specification ---
     parser.add_argument(
-        "--class-id", type=int, default=14,
-        help="Class ID for the target object (default: 14 for 'bird' in COCO)."
+        "--classes", type=str, default="bird", # Default to bird
+        help='Comma-separated list of class names (e.g., "person,cat,dog") or '
+             'class IDs (e.g., "0,15,16") to detect. Names are matched against '
+             'the loaded model\'s class list.'
     )
     parser.add_argument(
         "--margin", type=int, default=0,
@@ -105,33 +119,35 @@ def main():
     )
 
     args = parser.parse_args()
-    if args.single and args.output_template == default_output_template:
-        # If single mode is on, use a different default template to avoid overwriting
-        args.output_template = default_single_output_template
+
+    # --- Set default output template based on single/multiple mode ---
+    if args.output_template is None:
+        if args.single:
+            args.output_template = default_single_output_template
+        else:
+            args.output_template = default_output_template
+
+    # --- Parse --classes argument ---
+    target_classes_input = parse_classes_arg(args.classes)
+    if not target_classes_input:
+        parser.error("No target classes specified or parsed from --classes argument.")
 
     # --- Adjust Log Level ---
     log_level = logging.INFO
     if args.verbose == 1:
         log_level = logging.DEBUG
     elif args.verbose > 1:
-        log_level = logging.DEBUG # Keep it at DEBUG for -vv or more for now
-        # You could potentially set library loggers lower here if needed
-        # logging.getLogger("birdcrop").setLevel(logging.DEBUG)
-
-    # Set the root logger level
+        log_level = logging.DEBUG
     logging.getLogger().setLevel(log_level)
     if log_level == logging.DEBUG:
         logger.debug("Debug logging enabled.")
-
 
     # --- Validate and Find Inputs ---
     all_input_paths_str = args.inputs + args.input
     if not all_input_paths_str:
         parser.error("No input files or directories specified.")
-
     logger.info("Searching for image files...")
     image_files_to_process = find_image_files(all_input_paths_str, args.recursive)
-
     if not image_files_to_process:
         logger.info("Exiting: No images found to process.")
         exit(0)
@@ -139,11 +155,12 @@ def main():
     # --- Log Configuration ---
     logger.info(f"Processing {len(image_files_to_process)} image(s).")
     logger.info(f"Using model: {args.model}")
-    logger.info(f"Target class ID: {args.class_id}")
+    # Log the requested classes
+    logger.info(f"Target classes: {args.classes}")
     logger.info(f"Confidence threshold: {args.conf}")
     logger.info(f"Margin: {args.margin}px")
     logger.info(f"Process single best detection per image: {args.single}")
-    if args.single or len(image_files_to_process) > 1:
+    if args.single or len(target_classes_input) > 1: # Also log sort if multiple classes targeted
         logger.info(f"Sorting criterion: {args.sortby}")
     logger.info(f"Output template: {args.output_template}")
     logger.info(f"Force overwrite: {args.force}")
@@ -154,17 +171,23 @@ def main():
         logger.info("Loading detection model...")
         cropper = BirdCropper(
             model_path=args.model,
+            target_classes=target_classes_input, # Pass the parsed list
             process_single=args.single,
             sort_by=args.sortby,
-            class_id=args.class_id,
-            margin=args.margin # Pass margin
+            margin=args.margin
         )
-    except ValueError as e: # Catch specific init errors
+        # Log the actual IDs being targeted after initialization
+        logger.info(f"Model '{args.model}' loaded. Targeting class IDs: {sorted(list(cropper.target_class_ids))}")
+
+    except ValueError as e: # Catch specific init errors (like invalid sort_by/margin)
         logger.error(f"Configuration error: {e}")
         exit(1)
-    except Exception as e: # Catch model loading errors
+    except FileNotFoundError as e: # Specific error for model not found
+         logger.error(f"Model file not found: {e}")
+         exit(1)
+    except Exception as e: # Catch other model loading errors
         logger.error(f"Failed to initialize BirdCropper: {e}", exc_info=log_level <= logging.DEBUG)
-        logger.error("Exiting due to model loading failure.")
+        logger.error("Exiting due to model loading/initialization failure.")
         exit(1)
 
     # --- Process Images Concurrently ---
@@ -172,40 +195,31 @@ def main():
     start_time = time.time()
     total_crops_saved = 0
     processed_files_count = 0
-    # Store futures -> input path mapping
     futures_map: Dict[Any, Path] = {}
 
     with ThreadPoolExecutor(max_workers=args.workers, thread_name_prefix='Worker') as executor:
-        # Submit tasks: Pass necessary args to detect_and_crop
         for img_path in image_files_to_process:
             future = executor.submit(
                 cropper.detect_and_crop,
                 img_path,
                 args.conf,
-                args.output_template, # Pass template
-                args.force          # Pass force flag
+                args.output_template,
+                args.force
             )
             futures_map[future] = img_path
 
-        # Process results as they complete
         for future in as_completed(futures_map):
             img_path = futures_map[future]
             processed_files_count += 1
             try:
                 saved_crop_paths = future.result()
                 if saved_crop_paths:
-                    # Logging is now done inside detect_and_crop per file
                     total_crops_saved += len(saved_crop_paths)
-
             except Exception as exc:
-                # Catch errors raised from detect_and_crop or unexpected issues
                 logger.error(f"An error occurred processing {img_path.name}: {exc}", exc_info=log_level <= logging.DEBUG)
 
-            # Progress indicator
             if processed_files_count % 20 == 0 or processed_files_count == len(image_files_to_process):
-                 # Log progress less frequently for large batches
                  logger.info(f"Progress: {processed_files_count}/{len(image_files_to_process)} images processed.")
-
 
     end_time = time.time()
     duration = end_time - start_time
@@ -218,6 +232,7 @@ def main():
     logger.info(f"  Output paths generated using template: {args.output_template}")
     logger.info(f"  Total time: {duration:.2f} seconds")
     logger.info("-" * 30)
+
 
 if __name__ == "__main__":
     main()
