@@ -2,8 +2,7 @@
 
 **BirdCrop** is a Python command-line utility and library designed to automatically detect objects (like birds, people, etc.) in images using YOLO models and save cropped images of those detections. It offers flexible configuration for targeting specific classes, adding margins, sorting detections, and customizing output filenames and locations using powerful templating.
 
-Originally built for quickly extracting bird crops from high-frame-rate photography, it has been generalized to work with various YOLO models and target classes.
-It works very well for the author's primary use case, i.e., sighting/culling large numbers of bird in flight images quickly where the birds are small in the frame. (No time wasted with manual zooming and panning any more.)
+Originally developed to rapidly identify and extract avian subjects from high-speed burst photography, the system has since been expanded to support multiple and diverse object classes beyond birds. It excels in its primary application: processing large volumes of in-flight bird imagery where subjects occupy only a small pixel area within the frame. By automating detection and cropping workflows for burst sequences, the tool eliminates time-intensive manual adjustments like zooming and panning while retaining analytical accuracy, making it ideal for rapid wildlife surveys and high-throughput curation of still-image datasets.
 
 ## Key Features
 
