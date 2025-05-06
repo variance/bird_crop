@@ -84,7 +84,7 @@ def main():
     # --- Class Specification ---
     parser.add_argument("--classes", type=str, default="bird", help='Comma-separated list of class names (e.g., "person,cat,dog") or class IDs (e.g., "0,15,16") to detect. Names are matched against the loaded model\'s class list.')
     parser.add_argument("--list-classes", action="store_true", help="List the classes available in the specified --model and exit.")
-    parser.add_argument("--margin", type=int, default=0, help="Pixel margin to add around the detected bounding box before cropping.")
+    parser.add_argument("--margin", type=int, default=5, help="Pixel margin to add around the detected bounding box before cropping.")
     # --- Processing Arguments ---
     parser.add_argument("--multiple", dest='single', action='store_false', help="Process and save ALL detected objects per image. Default is to save only the best one.")
     parser.add_argument("--sortby", type=str, default="size", choices=["confidence", "size"], help="Criterion to sort detections ('confidence' or 'size'). Determines the 'best' object in single mode.")
