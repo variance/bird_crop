@@ -4,6 +4,9 @@
 Command-line script to detect and crop objects from images using the birdcrop library.
 """
 
+SCRIPT_VERSION = "0.2.0"
+SCRIPT_DATE = "2025-06-01"
+
 import argparse
 import logging
 import time
@@ -99,8 +102,19 @@ def main():
         "--save-metadata", action="store_true",
         help="Save detection metadata (bounding box, confidence, etc.) as a JSON file alongside each crop."
     )
+    parser.add_argument(
+        "--version", action="store_true",
+        help="Show version and date information for this script and the birdcrop library."
+    )
 
     args = parser.parse_args()
+
+    # --- Handle --version early ---
+    if getattr(args, "version", False):
+        import birdcrop
+        print(f"run_birdcrop.py version: {SCRIPT_VERSION}\t(date: {SCRIPT_DATE})")
+        print(f"birdcrop library version: {birdcrop.__version__}\t(date: {getattr(birdcrop, '__date__', 'unknown')})")
+        sys.exit(0)
 
     # --- Handle --list-classes early ---
     if args.list_classes:
