@@ -4,7 +4,7 @@
 Command-line script to detect and crop objects from images using the birdcrop library.
 """
 
-SCRIPT_VERSION = "0.2.0"
+SCRIPT_VERSION = "0.2.1"
 SCRIPT_DATE = "2025-06-01"
 
 import argparse
@@ -61,6 +61,20 @@ def list_model_classes(model_path: str):
         logger.error(f"Failed to load model '{model_path}' or access class names: {e}", exc_info=True)
         sys.exit(1)
 
+def expand_input_lists(input_paths):
+    """Expand any .csv/.lst/.txt files in input_paths into lists of image paths."""
+    expanded = []
+    for path in input_paths:
+        p = Path(path)
+        if p.suffix.lower() in {'.csv', '.lst', '.txt'} and p.is_file():
+            with p.open('r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        expanded.append(line)
+        else:
+            expanded.append(path)
+    return expanded
 
 def main():
     """Parses arguments and runs the bird cropping process."""
@@ -143,13 +157,14 @@ def main():
         parser.error("No target classes specified or parsed from --classes argument.")
 
     # --- Validate and Find Inputs ---
-    all_input_paths_str = args.inputs + args.input
+    all_input_paths_str = expand_input_lists(args.inputs + args.input)
     if not all_input_paths_str:
         parser.error("No input files or directories specified (and --list-classes not used).")
     logger.info("Searching for image files...")
     image_files_to_process = find_image_files(all_input_paths_str, args.recursive)
     if not image_files_to_process:
         logger.info("Exiting: No images found to process."); exit(0)
+    logger.info(f"Found {len(image_files_to_process)} image(s) to process.")
 
     # --- Log Configuration ---
     logger.info(f"Processing {len(image_files_to_process)} image(s).")
