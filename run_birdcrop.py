@@ -4,8 +4,8 @@
 Command-line script to detect and crop objects from images using the birdcrop library.
 """
 
-SCRIPT_VERSION = "0.2.1"
-SCRIPT_DATE = "2025-06-01"
+SCRIPT_VERSION = "0.2.3"
+SCRIPT_DATE = "2025-06-04"
 
 import argparse
 import logging
@@ -117,6 +117,10 @@ def main():
         help="Save detection metadata (bounding box, confidence, etc.) as a JSON file alongside each crop."
     )
     parser.add_argument(
+        "--do-not-preserve-exif", action="store_false", default=True, dest="preserve_exif",
+        help="Do not preserve EXIF metadata from the original image in the cropped JPG/JPEG images."
+    )
+    parser.add_argument(
         "--version", action="store_true",
         help="Show version and date information for this script and the birdcrop library."
     )
@@ -177,6 +181,7 @@ def main():
     logger.info(f"Output template: {args.output_template}")
     logger.info(f"Force overwrite: {args.force}")
     logger.info(f"Save metadata: {args.save_metadata}") # Log new option
+    logger.info(f"Preserve EXIF: {args.preserve_exif}")
     logger.info(f"Number of workers: {args.workers}")
 
     # --- Initialize Cropper ---
@@ -210,7 +215,8 @@ def main():
                 args.output_template,
                 args.force,
                 args.dry_run, # Pass dry_run flag
-                args.save_metadata # Pass save_metadata flag
+                args.save_metadata, # Pass save_metadata flag
+                preserve_exif=args.preserve_exif # Pass preserve_exif flag
             )
             futures_map[future] = img_path
 
@@ -242,6 +248,8 @@ def main():
         logger.info(f"  Saved {total_crops_saved} crop(s).")
         if args.save_metadata:
             logger.info(f"  Saved {total_metadata_saved} metadata file(s).")
+        if args.preserve_exif:
+            logger.info(f"  (Attempted to preserve EXIF for saved crops)") # Actual count of preserved EXIF would depend on library
     logger.info(f"  Output paths generated using template: {args.output_template}")
     logger.info(f"  Total time: {duration:.2f} seconds")
     logger.info("-" * 30)

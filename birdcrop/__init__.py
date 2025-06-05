@@ -11,8 +11,8 @@ from .utils import find_image_files
 # from .exceptions import BirdCropError, ModelLoadError, ImageProcessingError, PredictionError, FileWriteError, DirectoryCreationError
 
 # Define package version (optional but recommended)
-__version__ = "0.1.1"
-__date__ = "2025-06-01"
+__version__ = "0.1.2"
+__date__ = "2025-06-05"
 
 # Define what gets imported with 'from birdcrop import *' (optional)
 __all__ = [

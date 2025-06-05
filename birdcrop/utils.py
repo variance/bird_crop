@@ -6,38 +6,40 @@ import piexif # Import piexif
 import piexif.helper # For user comments
 from pathlib import Path
 import logging
-from typing import List, Set, Dict, Any, Optional
+from typing import List, Set, Dict, Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff'} # Keep this
 
 # --- New Function: Safe EXIF Reading ---
-def get_exif_data(image_path: Path) -> Optional[Dict[str, Any]]:
+def get_exif_data(image_path: Path) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """
     Attempts to read EXIF data from an image file.
-
     Handles potential errors gracefully. Currently focuses on JPEG/TIFF.
 
     Args:
         image_path (Path): Path to the image file.
 
     Returns:
-        Optional[Dict[str, Any]]: A dictionary containing EXIF data if successful,
-                                  otherwise None. Returns simplified keys.
+        Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+            - Raw EXIF dictionary from piexif.load() if successful (e.g., {"0th": ..., "Exif": ...}), otherwise None.
+            - Simplified/flattened EXIF data dictionary for templating if successful, otherwise None.
     """
     if image_path.suffix.lower() not in ['.jpg', '.jpeg', '.tif', '.tiff']:
         logger.debug(f"EXIF reading skipped for non-JPEG/TIFF file: {image_path.name}")
-        return None
+        return None, None
 
-    exif_data = {}
+    raw_exif_dict: Optional[Dict[str, Any]] = None
+    simplified_exif_data: Dict[str, Any] = {}
     try:
-        exif_dict = piexif.load(str(image_path))
-        # Simplify the structure and decode UserComment if present
-        for ifd_name in exif_dict:
+        raw_exif_dict = piexif.load(str(image_path)) # Load raw EXIF data
+
+        # Create the simplified_exif_data from raw_exif_dict for templating
+        for ifd_name in raw_exif_dict:
             if ifd_name == "thumbnail": # Skip thumbnail binary data
                 continue
-            for tag, value in exif_dict[ifd_name].items():
+            for tag, value in raw_exif_dict[ifd_name].items():
                 tag_name = piexif.TAGS[ifd_name].get(tag, {}).get("name", f"{ifd_name}_{tag}") # Get readable tag name
 
                 # Decode bytes to string where appropriate
@@ -45,35 +47,39 @@ def get_exif_data(image_path: Path) -> Optional[Dict[str, Any]]:
                     # Special handling for UserComment (often needs specific decoding)
                     if tag_name == "UserComment":
                         try:
-                             # piexif.helper handles common encodings like ASCII, JIS, Unicode
-                            exif_data[tag_name] = piexif.helper.UserComment.load(value)
+                            simplified_exif_data[tag_name] = piexif.helper.UserComment.load(value)
                         except Exception:
                              logger.debug(f"Could not decode UserComment for {image_path.name}")
-                             # Fallback to representing as bytes or skipping
-                             # exif_data[tag_name] = value
                              pass # Skip if undecodable
                     else:
                         try:
-                            exif_data[tag_name] = value.decode('utf-8', errors='replace').strip('\x00')
+                            simplified_exif_data[tag_name] = value.decode('utf-8', errors='replace').strip('\x00')
                         except UnicodeDecodeError:
                             logger.debug(f"Could not decode tag '{tag_name}' as UTF-8 for {image_path.name}, storing raw bytes representation.")
-                            # Store a representation instead of raw bytes
-                            exif_data[tag_name] = f"bytes[{len(value)}]"
+                            simplified_exif_data[tag_name] = f"bytes[{len(value)}]"
                 else:
-                    exif_data[tag_name] = value
+                    simplified_exif_data[tag_name] = value
+        
+        # If raw_exif_dict was empty or only contained a thumbnail, simplified_exif_data might be empty.
+        # Ensure simplified_exif_data is None if it's empty, for consistency.
+        if not simplified_exif_data:
+            simplified_exif_data_to_return = None
+        else:
+            simplified_exif_data_to_return = simplified_exif_data
 
         logger.debug(f"Successfully read EXIF data for {image_path.name}")
-        return exif_data
+        return raw_exif_dict, simplified_exif_data_to_return
 
     except FileNotFoundError:
         logger.warning(f"File not found during EXIF read: {image_path}")
-        return None
+        return None, None
     except piexif.InvalidImageDataError:
         logger.debug(f"No valid EXIF data found in {image_path.name}")
-        return None
+        return None, None # piexif.load raises this if no EXIF structure
     except Exception as e:
         logger.warning(f"Error reading EXIF data for {image_path.name}: {e}", exc_info=False) # Keep log clean unless debugging
-        return None
+        return None, None
+
 
 
 # --- New Class: SafeFormatter ---

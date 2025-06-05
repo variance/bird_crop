@@ -7,6 +7,7 @@ from ultralytics import YOLO
 from pathlib import Path
 import logging
 import os
+import piexif # For writing EXIF data
 import json # Import json for metadata saving
 from typing import List, Dict, Any, Optional, Set, Union, Tuple # Added Tuple
 from collections import defaultdict
@@ -80,8 +81,9 @@ class BirdCropper:
                         conf: float,
                         output_template: str,
                         force_overwrite: bool,
-                        dry_run: bool,          # New flag
-                        save_metadata: bool     # New flag
+                        dry_run: bool,
+                        save_metadata: bool,
+                        preserve_exif: bool = True,
                        ) -> Tuple[List[Path], List[Path]]: # Return tuple of saved paths
         """
         Detects target objects, crops them, and optionally saves metadata.
@@ -94,6 +96,7 @@ class BirdCropper:
             force_overwrite (bool): If True, overwrite existing output files.
             dry_run (bool): If True, simulate actions without writing files.
             save_metadata (bool): If True, save metadata as JSON alongside crops.
+            preserve_exif (bool): If True, attempt to preserve EXIF from original to crop.
 
         Returns:
             Tuple[List[Path], List[Path]]: A tuple containing:
@@ -104,7 +107,10 @@ class BirdCropper:
         if not img_path.is_file(): logger.warning(f"Input path is not a file, skipping: {img_path}"); return [], []
         try: stat_info = img_path.stat()
         except Exception as e: logger.warning(f"Could not get file stats for {img_path}: {e}"); stat_info = None
-        exif_info = get_exif_data(img_path)
+        
+        # Get both raw EXIF (for preservation) and simplified EXIF (for templating)
+        raw_exif_for_saving, exif_info_for_template = get_exif_data(img_path)
+
         try:
             img = cv2.imread(str(img_path))
             if img is None: logger.error(f"Could not read image: {img_path}"); return [], []
@@ -166,15 +172,15 @@ class BirdCropper:
                 # --- Prepare Data for Templating ---
                 category_name = self.class_id_to_name.get(detected_cls_id, f"unknown_{detected_cls_id}")
                 template_data = {
-                    'p': img_path, 'stat': stat_info, 'exif': exif_info,
+                    'p': img_path, 'stat': stat_info, 'exif': exif_info_for_template, # Use simplified EXIF for template
                     'box': det['box'], 'cls': detected_cls_id, 'category': category_name,
                     'conf': det['conf'], 'size': det['size'],
                     'x1': x1_orig, 'y1': y1_orig, 'x2': x2_orig, 'y2': y2_orig,
                     'nr': nr, 'pcnr': pcnr, 'width': crop_width, 'height': crop_height, 'margin': self.margin,
                     'x1_crop': x1_crop, 'y1_crop': y1_crop, 'x2_crop': x2_crop, 'y2_crop': y2_crop,
                 }
-                if stat_info: template_data['st_size'] = stat_info.st_size; template_data['st_mtime'] = stat_info.st_mtime
-                if exif_info: template_data['DateTimeOriginal'] = exif_info.get('DateTimeOriginal', ''); template_data['Make'] = exif_info.get('Make', ''); template_data['Model'] = exif_info.get('Model', '')
+                if stat_info: template_data['st_size'] = stat_info.st_size; template_data['st_mtime'] = stat_info.st_mtime # type: ignore
+                if exif_info_for_template: template_data['DateTimeOriginal'] = exif_info_for_template.get('DateTimeOriginal', ''); template_data['Make'] = exif_info_for_template.get('Make', ''); template_data['Model'] = exif_info_for_template.get('Model', '')
 
                 # --- Generate Output Path for Crop ---
                 output_crop_path = generate_output_path(output_template, template_data, img_path)
@@ -199,6 +205,20 @@ class BirdCropper:
                         if success:
                             logger.info(f"Saved crop: {output_crop_path} (Class: {category_name} #{pcnr}, Conf: {det['conf']:.2f}, Size: {det['size']:.0f}px)")
                             saved_crop_paths.append(output_crop_path)
+
+                            # --- Preserve EXIF data if requested and available ---
+                            if preserve_exif and raw_exif_for_saving and output_crop_path.suffix.lower() in ['.jpg', '.jpeg', '.tif', '.tiff']:
+                                try:
+                                    # Check if there's substantive EXIF data to write (excluding empty IFDs or just thumbnail)
+                                    if any(raw_exif_for_saving.get(ifd_name, {}) for ifd_name in ["0th", "Exif", "GPS", "Interop", "1st"]):
+                                        exif_bytes = piexif.dump(raw_exif_for_saving)
+                                        if exif_bytes: # Ensure exif_bytes is not empty
+                                            piexif.insert(exif_bytes, str(output_crop_path))
+                                            logger.info(f"Preserved EXIF data in: {output_crop_path}")
+                                        else: logger.debug(f"EXIF data for {img_path.name} was empty after dump, not inserting into {output_crop_path.name}")
+                                    else: logger.debug(f"No substantive EXIF data found in {img_path.name} to preserve for {output_crop_path.name}.")
+                                except Exception as exif_e:
+                                    logger.error(f"Failed to preserve EXIF data for {output_crop_path}: {exif_e}")
                         else:
                             logger.error(f"Failed to write crop file: {output_crop_path}")
 
@@ -242,4 +262,3 @@ class BirdCropper:
                 logger.exception(f"Error during processing loop for {img_path.name} (detection {nr}, pcnr {pcnr}): {e}")
 
         return saved_crop_paths, saved_metadata_paths # Return both lists
-
