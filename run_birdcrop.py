@@ -4,8 +4,10 @@
 Command-line script to detect and crop objects from images using the birdcrop library.
 """
 
-SCRIPT_VERSION = "0.2.3"
-SCRIPT_DATE = "2025-06-04"
+SCRIPT_VERSION = "0.2.4"
+SCRIPT_DATE = "2025-06-12"
+DEFAULT_MODEL_URL = "https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov8n.pt"
+DEFAULT_MODEL_FILENAME = "yolov8n.pt"
 
 import argparse
 import logging
@@ -75,6 +77,24 @@ def expand_input_lists(input_paths):
         else:
             expanded.append(path)
     return expanded
+
+import urllib.request
+
+def download_model(model_path: str, url: str):
+    resolved_path = os.path.abspath(model_path)
+    logger.info(f"Model file '{resolved_path}' not found. Downloading from {url} ...")
+    try:
+        model_path_obj = Path(model_path)
+        if model_path_obj.parent and not model_path_obj.parent.exists():
+            model_path_obj.parent.mkdir(parents=True, exist_ok=True)
+        with urllib.request.urlopen(url) as response, open(model_path, 'wb') as out_file:
+            out_file.write(response.read())
+        logger.info(f"Model downloaded successfully to '{model_path}'.")
+    except Exception as e:
+        logger.error(f"Failed to download model: {e}")
+        sys.exit(1)
+
+# -------------------------------------------------------------------------- #
 
 def main():
     """Parses arguments and runs the bird cropping process."""
@@ -186,6 +206,14 @@ def main():
 
     # --- Initialize Cropper ---
     try:
+        # --- Auto-download model if missing ---
+        model_path = args.model
+        if not os.path.isfile(model_path):
+            if model_path == DEFAULT_MODEL_FILENAME:
+                download_model(model_path, DEFAULT_MODEL_URL)
+            else:
+                logger.error(f"Model file '{model_path}' not found and no auto-download URL is known for this file.")
+                sys.exit(1)
         logger.info("Loading detection model...")
         cropper = BirdCropper(
             model_path=args.model, target_classes=target_classes_input,
