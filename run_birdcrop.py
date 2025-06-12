@@ -17,7 +17,7 @@ YOLOV8_MODEL_SIZES = {
     "xlarge": ("yolov8x.pt", _YOLO_URL_PREFIX + "yolov8x.pt"),
 }
 
-DEFAULT_MODEL_SIZE = "small"
+DEFAULT_MODEL_SIZE = "nano"
 DEFAULT_MODEL_FILENAME, DEFAULT_MODEL_URL = YOLOV8_MODEL_SIZES[DEFAULT_MODEL_SIZE]
 
 # -------------------------------------------------------------------------- #
