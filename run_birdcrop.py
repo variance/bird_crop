@@ -6,8 +6,20 @@ Command-line script to detect and crop objects from images using the birdcrop li
 
 SCRIPT_VERSION = "0.2.4"
 SCRIPT_DATE = "2025-06-12"
-DEFAULT_MODEL_URL = "https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov8n.pt"
-DEFAULT_MODEL_FILENAME = "yolov8n.pt"
+
+# Model size mapping for YOLOv8
+YOLOV8_MODEL_SIZES = {
+    "nano":   ("yolov8n.pt", "https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov8n.pt"),
+    "small":  ("yolov8s.pt", "https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov8s.pt"),
+    "medium": ("yolov8m.pt", "https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov8m.pt"),
+    "large":  ("yolov8l.pt", "https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov8l.pt"),
+    "xlarge": ("yolov8x.pt", "https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov8x.pt"),
+}
+
+DEFAULT_MODEL_SIZE = "small"
+DEFAULT_MODEL_FILENAME, DEFAULT_MODEL_URL = YOLOV8_MODEL_SIZES[DEFAULT_MODEL_SIZE]
+
+# -------------------------------------------------------------------------- #
 
 import argparse
 import logging
@@ -116,7 +128,9 @@ def main():
     parser.add_argument("--output-template", "-o", type=str, help="Output path template (Python str.format_map syntax). Available keys include: p, stat, exif, box, cls (id), conf, size, x1, y1, x2, y2, nr (overall crop #), pcnr (per-category crop #), width, height, margin, category (name), etc. Relative paths are anchored to the input image's directory. Default for multiple crops: '{default_output_template}'. Default for single crop: '{default_single_output_template}'.")
     parser.add_argument("--force", "-f", action="store_true", help="Force overwrite existing output files. If not set, existing files will be skipped.")
     # --- Model & Detection Arguments ---
-    parser.add_argument("--model", type=str, default="yolov8n.pt", help="Path to the YOLOv8 model file (.pt).")
+    parser.add_argument("--model", type=str, default=None, help="Path to the YOLOv8 model file (.pt). If not specified, --model-size is used.")
+    parser.add_argument("--model-size", type=str, choices=YOLOV8_MODEL_SIZES.keys(), default=DEFAULT_MODEL_SIZE,
+                        help="YOLOv8 model size to use if --model is not specified. Choices: nano, small, medium, large, xlarge.")
     parser.add_argument("--conf", type=float, default=0.5, help="Confidence threshold for detection (0.0 to 1.0).")
     # --- Class Specification ---
     parser.add_argument("--classes", type=str, default="bird", help='Comma-separated list of class names (e.g., "person,cat,dog") or class IDs (e.g., "0,15,16") to detect. Names are matched against the loaded model\'s class list.')
@@ -204,24 +218,37 @@ def main():
     logger.info(f"Preserve EXIF: {args.preserve_exif}")
     logger.info(f"Number of workers: {args.workers}")
 
+    # --- Model selection and auto-download ---
+    if args.model:
+        model_path = args.model
+        model_url = None
+        logger.info(f"Using user-specified model: {model_path}")
+    else:
+        model_filename, model_url = YOLOV8_MODEL_SIZES[args.model_size]
+        model_path = model_filename
+        logger.info(f"No --model specified. Using --model-size '{args.model_size}': {model_filename}")
+
+    if not os.path.isfile(model_path):
+        if model_url:
+            download_model(model_path, model_url)
+        else:
+            logger.error(f"Model file '{model_path}' not found and no auto-download URL is known for this file.")
+            sys.exit(1)
+            
     # --- Initialize Cropper ---
     try:
-        # --- Auto-download model if missing ---
-        model_path = args.model
-        if not os.path.isfile(model_path):
-            if model_path == DEFAULT_MODEL_FILENAME:
-                download_model(model_path, DEFAULT_MODEL_URL)
-            else:
-                logger.error(f"Model file '{model_path}' not found and no auto-download URL is known for this file.")
-                sys.exit(1)
         logger.info("Loading detection model...")
         cropper = BirdCropper(
-            model_path=args.model, target_classes=target_classes_input,
+            model_path=model_path, target_classes=target_classes_input,
             process_single=args.single, sort_by=args.sortby, margin=args.margin
         )
         logger.info(f"Model '{args.model}' loaded. Targeting class IDs: {sorted(list(cropper.target_class_ids))}")
     except ValueError as e: logger.error(f"Configuration error: {e}"); exit(1)
     except FileNotFoundError as e: logger.error(f"Model file not found: {e}"); exit(1)
+    except RuntimeError as e:
+        if "CUDA out of memory" in str(e):
+            logger.error("CUDA out of memory! Try using a smaller model (e.g., --model-size nano or small), or run on CPU.")
+        raise
     except Exception as e:
         logger.error(f"Failed to initialize BirdCropper: {e}", exc_info=log_level <= logging.DEBUG)
         logger.error("Exiting due to model loading/initialization failure."); exit(1)
