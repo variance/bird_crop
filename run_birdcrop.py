@@ -4,16 +4,17 @@
 Command-line script to detect and crop objects from images using the birdcrop library.
 """
 
-SCRIPT_VERSION = "0.2.4"
+SCRIPT_VERSION = "0.3.1"
 SCRIPT_DATE = "2025-06-12"
 
 # Model size mapping for YOLOv8
+_YOLO_URL_PREFIX = "https://github.com/ultralytics/assets/releases/download/v8.1.0/"
 YOLOV8_MODEL_SIZES = {
-    "nano":   ("yolov8n.pt", "https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov8n.pt"),
-    "small":  ("yolov8s.pt", "https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov8s.pt"),
-    "medium": ("yolov8m.pt", "https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov8m.pt"),
-    "large":  ("yolov8l.pt", "https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov8l.pt"),
-    "xlarge": ("yolov8x.pt", "https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov8x.pt"),
+    "nano":   ("yolov8n.pt", _YOLO_URL_PREFIX + "yolov8n.pt"),
+    "small":  ("yolov8s.pt", _YOLO_URL_PREFIX + "yolov8s.pt"),
+    "medium": ("yolov8m.pt", _YOLO_URL_PREFIX + "yolov8m.pt"),
+    "large":  ("yolov8l.pt", _YOLO_URL_PREFIX + "yolov8l.pt"),
+    "xlarge": ("yolov8x.pt", _YOLO_URL_PREFIX + "yolov8x.pt"),
 }
 
 DEFAULT_MODEL_SIZE = "small"
@@ -130,8 +131,8 @@ def main():
     # --- Model & Detection Arguments ---
     parser.add_argument("--model", type=str, default=None, help="Path to the YOLOv8 model file (.pt). If not specified, --model-size is used.")
     parser.add_argument("--model-size", type=str, choices=YOLOV8_MODEL_SIZES.keys(), default=DEFAULT_MODEL_SIZE,
-                        help="YOLOv8 model size to use if --model is not specified. Choices: nano, small, medium, large, xlarge.")
-    parser.add_argument("--conf", type=float, default=0.5, help="Confidence threshold for detection (0.0 to 1.0).")
+                        help="YOLOv8 model size to use if --model is not specified. Choices: " + f"{', '.join(YOLOV8_MODEL_SIZES.keys())}. Default: {DEFAULT_MODEL_SIZE} ({DEFAULT_MODEL_FILENAME}).")
+    parser.add_argument("--confidence", '-C', type=float, default=0.5, help="Confidence threshold for detection (0.0 to 1.0). Default: 0.5.")
     # --- Class Specification ---
     parser.add_argument("--classes", type=str, default="bird", help='Comma-separated list of class names (e.g., "person,cat,dog") or class IDs (e.g., "0,15,16") to detect. Names are matched against the loaded model\'s class list.')
     parser.add_argument("--list-classes", action="store_true", help="List the classes available in the specified --model and exit.")
@@ -208,7 +209,7 @@ def main():
     logger.info(f"Processing {len(image_files_to_process)} image(s).")
     logger.info(f"Using model: {args.model}")
     logger.info(f"Target classes: {args.classes}")
-    logger.info(f"Confidence threshold: {args.conf}")
+    logger.info(f"Confidence threshold: {args.confidence}")
     logger.info(f"Margin: {args.margin}px")
     logger.info(f"Process single best detection per image: {args.single}")
     if args.single or len(target_classes_input) > 1: logger.info(f"Sorting criterion: {args.sortby}")
@@ -266,7 +267,7 @@ def main():
             future = executor.submit(
                 cropper.detect_and_crop,
                 img_path,
-                args.conf,
+                args.confidence,
                 args.output_template,
                 args.force,
                 args.dry_run, # Pass dry_run flag
