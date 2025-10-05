@@ -4,8 +4,8 @@
 Command-line script to detect and crop objects from images using the birdcrop library.
 """
 
-SCRIPT_VERSION = "0.3.1"
-SCRIPT_DATE = "2025-06-12"
+SCRIPT_VERSION = "0.3.2"
+SCRIPT_DATE = "2025-06-14"
 
 # Model size mapping for YOLOv8
 _YOLO_URL_PREFIX = "https://github.com/ultralytics/assets/releases/download/v8.1.0/"
@@ -171,6 +171,8 @@ def main():
 
     # --- Handle --list-classes early ---
     if args.list_classes:
+        if not args.model:
+            parser.error("--list-classes requires --model to be specified (path to a YOLOv8 .pt file).")
         list_model_classes(args.model)
 
     # --- Adjust Log Level ---
