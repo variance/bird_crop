@@ -27,9 +27,14 @@ import logging
 import time
 import os
 import sys
+import re
+import json
+import importlib.metadata
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Tuple, Set, Dict, Any
+from urllib.request import urlopen, Request
+from urllib.error import URLError, HTTPError
 
 # Import from the library
 from ultralytics import YOLO
@@ -44,6 +49,97 @@ logging.basicConfig(
 )
 # logging.getLogger("ultralytics").setLevel(logging.WARNING)
 logger = logging.getLogger("run_birdcrop")
+
+
+def _parse_version_parts(value: str) -> Tuple[int, ...]:
+    """Extract numeric version parts from strings like '8.3.10' or '8.3.10rc1'."""
+    parts = re.findall(r"\d+", value)
+    if not parts:
+        return (0,)
+    return tuple(int(p) for p in parts[:4])
+
+
+def _fetch_json(url: str, timeout: float = 2.0) -> Dict[str, Any] | None:
+    """Fetch JSON from URL with a short timeout; return None on network/API errors."""
+    req = Request(url, headers={"User-Agent": "birdcrop-update-check/1.0"})
+    try:
+        with urlopen(req, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except (URLError, HTTPError, TimeoutError, json.JSONDecodeError):
+        return None
+
+
+def check_ultralytics_update(timeout: float = 2.0):
+    """Check PyPI for newer ultralytics package versions."""
+    try:
+        local_version = importlib.metadata.version("ultralytics")
+    except importlib.metadata.PackageNotFoundError:
+        logger.debug("Update check: ultralytics package not found in environment.")
+        return
+    except Exception as exc:
+        logger.debug(f"Update check: could not read local ultralytics version: {exc}")
+        return
+
+    payload = _fetch_json("https://pypi.org/pypi/ultralytics/json", timeout=timeout)
+    if not payload:
+        logger.debug("Update check: could not query PyPI for ultralytics.")
+        return
+
+    latest_version = str(payload.get("info", {}).get("version", "")).strip()
+    if not latest_version:
+        logger.debug("Update check: PyPI response did not contain ultralytics version.")
+        return
+
+    if _parse_version_parts(latest_version) > _parse_version_parts(local_version):
+        logger.warning(
+            "ultralytics update available: local=%s latest=%s (PyPI)",
+            local_version,
+            latest_version,
+        )
+    else:
+        logger.info("ultralytics is up to date (local=%s, latest=%s).", local_version, latest_version)
+
+
+def check_model_release_update(current_assets_tag: str, model_filename: str | None = None, timeout: float = 2.0):
+    """Check GitHub releases for newer ultralytics/assets model tags."""
+    payload = _fetch_json("https://api.github.com/repos/ultralytics/assets/releases/latest", timeout=timeout)
+    if not payload:
+        logger.debug("Update check: could not query GitHub latest ultralytics/assets release.")
+        return
+
+    latest_tag = str(payload.get("tag_name", "")).strip()
+    if not latest_tag:
+        logger.debug("Update check: GitHub response did not include tag_name.")
+        return
+
+    if _parse_version_parts(latest_tag) <= _parse_version_parts(current_assets_tag):
+        logger.info("Model assets tag is up to date (configured=%s, latest=%s).", current_assets_tag, latest_tag)
+        return
+
+    assets = payload.get("assets") or []
+    if model_filename:
+        has_matching_asset = any(a.get("name") == model_filename for a in assets)
+        if has_matching_asset:
+            logger.warning(
+                "Newer model release available for %s: configured tag=%s, latest tag=%s.",
+                model_filename,
+                current_assets_tag,
+                latest_tag,
+            )
+        else:
+            logger.warning(
+                "Newer ultralytics/assets release detected (configured tag=%s, latest tag=%s), "
+                "but '%s' is not listed in latest assets.",
+                current_assets_tag,
+                latest_tag,
+                model_filename,
+            )
+    else:
+        logger.warning(
+            "Newer ultralytics/assets release detected: configured tag=%s, latest tag=%s.",
+            current_assets_tag,
+            latest_tag,
+        )
 
 
 def parse_classes_arg(classes_str: str) -> List[str | int]:
@@ -111,7 +207,8 @@ def download_model(model_path: str, url: str):
 
 def main():
     """Parses arguments and runs the bird cropping process."""
-    default_workers = min(8, os.cpu_count() + 4 if os.cpu_count() else 4)
+    cpu_count = os.cpu_count() or 0
+    default_workers = min(8, cpu_count + 4)
 
     # --- Default Output Templates ---
     default_output_template = "{p.parent}/{category}/{p.stem}_crop_{nr}.jpg"
@@ -158,6 +255,18 @@ def main():
     parser.add_argument(
         "--version", action="store_true",
         help="Show version and date information for this script and the birdcrop library."
+    )
+    parser.add_argument(
+        "--check-updates", dest="check_updates", action="store_true", default=True,
+        help="Check PyPI/GitHub for newer ultralytics package and model release tags."
+    )
+    parser.add_argument(
+        "--no-update-check", dest="check_updates", action="store_false",
+        help="Disable online update checks for ultralytics package/model releases."
+    )
+    parser.add_argument(
+        "--update-check-timeout", type=float, default=2.0,
+        help="Timeout in seconds for each online update check request."
     )
 
     args = parser.parse_args()
@@ -226,10 +335,28 @@ def main():
         model_path = args.model
         model_url = None
         logger.info(f"Using user-specified model: {model_path}")
+        configured_assets_tag = _YOLO_URL_PREFIX.rstrip('/').split('/')[-1]
+        selected_model_filename = Path(model_path).name
     else:
         model_filename, model_url = YOLOV8_MODEL_SIZES[args.model_size]
         model_path = model_filename
         logger.info(f"No --model specified. Using --model-size '{args.model_size}': {model_filename}")
+        configured_assets_tag = _YOLO_URL_PREFIX.rstrip('/').split('/')[-1]
+        selected_model_filename = model_filename
+
+    if args.check_updates:
+        if args.update_check_timeout <= 0:
+            logger.warning("Skipping update check due to non-positive --update-check-timeout=%s", args.update_check_timeout)
+        else:
+            logger.info("Checking for updates (timeout %.1fs per endpoint)...", args.update_check_timeout)
+            check_ultralytics_update(timeout=args.update_check_timeout)
+            check_model_release_update(
+                current_assets_tag=configured_assets_tag,
+                model_filename=selected_model_filename,
+                timeout=args.update_check_timeout,
+            )
+    else:
+        logger.info("Update checks are disabled (--no-update-check).")
 
     if not os.path.isfile(model_path):
         if model_url:
@@ -245,7 +372,7 @@ def main():
             model_path=model_path, target_classes=target_classes_input,
             process_single=args.single, sort_by=args.sortby, margin=args.margin
         )
-        logger.info(f"Model '{args.model}' loaded. Targeting class IDs: {sorted(list(cropper.target_class_ids))}")
+        logger.info(f"Model '{model_path}' loaded. Targeting class IDs: {sorted(list(cropper.target_class_ids))}")
     except ValueError as e: logger.error(f"Configuration error: {e}"); exit(1)
     except FileNotFoundError as e: logger.error(f"Model file not found: {e}"); exit(1)
     except RuntimeError as e:

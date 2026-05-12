@@ -44,3 +44,24 @@ The main script is `run_birdcrop.py`.
 
 ```bash
 python run_birdcrop.py [options] [INPUT_PATH ...]
+```
+
+## Update Checks
+
+BirdCrop can check for upstream updates at startup.
+
+- Package versions: https://pypi.org/pypi/ultralytics/json
+- YOLO asset release tags: https://api.github.com/repos/ultralytics/assets/releases/latest
+
+CLI flags:
+
+```bash
+# enabled by default
+python run_birdcrop.py --check-updates [options] [INPUT_PATH ...]
+
+# disable all online checks
+python run_birdcrop.py --no-update-check [options] [INPUT_PATH ...]
+
+# network timeout per endpoint in seconds
+python run_birdcrop.py --update-check-timeout 2.0 [options] [INPUT_PATH ...]
+```
