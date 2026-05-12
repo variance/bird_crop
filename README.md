@@ -65,3 +65,32 @@ python run_birdcrop.py --no-update-check [options] [INPUT_PATH ...]
 # network timeout per endpoint in seconds
 python run_birdcrop.py --update-check-timeout 2.0 [options] [INPUT_PATH ...]
 ```
+
+## Upgrading
+
+To keep BirdCrop and its YOLO models up to date, use the `upgrade_birdcrop.py` utility:
+
+```bash
+# upgrade both package and download latest models
+python upgrade_birdcrop.py
+
+# upgrade package only
+python upgrade_birdcrop.py --package-only
+
+# download latest models only
+python upgrade_birdcrop.py --models-only
+
+# download specific models
+python upgrade_birdcrop.py --models yolov8n.pt,yolov8l.pt
+
+# download models to a specific directory
+python upgrade_birdcrop.py --output-dir ./models
+
+# verbose output
+python upgrade_birdcrop.py --verbose
+```
+
+The upgrade utility:
+- Updates `ultralytics` package via `pip install --upgrade ultralytics`
+- Downloads the latest YOLO model files from the latest [ultralytics/assets](https://github.com/ultralytics/assets) release
+- Skips models that already exist locally (use `--package-only` or `--models-only` to update just one component)
