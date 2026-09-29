@@ -1,2 +1,4 @@
 /birdcrop/__pycache__
 yolov8?.pt
+yolo26?.pt
+.vscode/
