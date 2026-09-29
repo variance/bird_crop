@@ -6,7 +6,7 @@ Originally developed to rapidly identify and extract avian subjects from high-sp
 
 ## Key Features
 
-*   **YOLO-Powered Detection:** Leverages Ultralytics YOLO models (like YOLOv8) for object detection. Use pre-trained models or your custom ones.
+*   **YOLO-Powered Detection:** Uses YOLO26 models by default for faster, more accurate bird detection. You can also provide a YOLOv8 or custom model with `--model`.
 *   **Flexible Class Targeting:** Specify which object classes to detect using their names (e.g., `"bird,dog,cat"`) or their model-specific IDs (e.g., `"14,16,15"`). The tool adapts to the classes present in the loaded model.
 *   **List Model Classes:** Easily list all classes and their IDs available within a specific YOLO model file using the `--list-classes` option.
 *   **Customizable Output Paths:** Define complex output file paths and names using Python's format string syntax via `--output-template`. Access detailed information about the input file, detection, and crop (see Template Variables below).
@@ -36,7 +36,24 @@ Originally developed to rapidly identify and extract avian subjects from high-sp
     *   `numpy`: For numerical operations.
     *   `piexif`: For reading EXIF metadata from images (used in templating).
 
-3.  **(Optional) Download a YOLO model:** If you don't have one, download a pre-trained model (like `yolov8n.pt` used by default) from the Ultralytics YOLO releases. Place it where the script can find it (e.g., in the `bird_crop` directory) or specify the path using `--model`.
+3.  **(Optional) Download a YOLO model:** BirdCrop uses `yolo26n.pt` by default. If the selected model is not present, `run_birdcrop.py` downloads it automatically from the Ultralytics assets release. You can select another YOLO26 size with `--model-size` (`nano`, `small`, `medium`, `large`, or `xlarge`), or specify an existing YOLOv8/custom model with `--model`.
+
+### Model Selection
+
+The default model is `yolo26n.pt`. Use `--model-size` to choose another YOLO26 model:
+
+```bash
+# default: yolo26n.pt
+python run_birdcrop.py path/to/images
+
+# use the large YOLO26 model
+python run_birdcrop.py --model-size large path/to/images
+
+# use a specific model file, including YOLOv8 or a custom model
+python run_birdcrop.py --model path/to/model.pt path/to/images
+```
+
+When using `--model-size`, a missing model file is downloaded automatically. A user-specified `--model` must already exist locally.
 
 ## Usage
 
@@ -80,8 +97,8 @@ python upgrade_birdcrop.py --package-only
 # download latest models only
 python upgrade_birdcrop.py --models-only
 
-# download specific models
-python upgrade_birdcrop.py --models yolov8n.pt,yolov8l.pt
+# download specific YOLO26 models
+python upgrade_birdcrop.py --models yolo26n.pt,yolo26l.pt
 
 # download models to a specific directory
 python upgrade_birdcrop.py --output-dir ./models

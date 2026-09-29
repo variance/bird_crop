@@ -3,6 +3,9 @@
 Upgrade utility for BirdCrop: updates the ultralytics package and optionally downloads the latest YOLO models.
 """
 
+SCRIPT_VERSION = "0.1.1"
+SCRIPT_DATE = "2026-09-29"
+
 import argparse
 import logging
 import subprocess
@@ -59,8 +62,17 @@ def upgrade_ultralytics_package():
         return False
 
 
-def download_latest_models(output_dir: str = ".", model_list: List[str] | None = None):
-    """Download the latest YOLO models from the latest GitHub release."""
+
+def download_latest_models(output_dir: str = ".", model_list: List[str] | None = None, model_major_version: str = "26") -> bool:
+    """Download the latest YOLO models from the latest GitHub release.
+    
+    Args:
+        output_dir (str): Directory to download models into.
+        model_list (List[str] | None): List of model names to download. If None, downloads default models.
+        model_major_version (str): The major version of the YOLO models to download (e.g., "26" for YOLO26 or "v8" for YOLOv8).
+    Returns:
+        bool: True if all models were downloaded successfully, False otherwise.
+    """
     logger.info("Fetching latest ultralytics/assets release...")
     
     payload = _fetch_json("https://api.github.com/repos/ultralytics/assets/releases/latest", timeout=5.0)
@@ -83,7 +95,8 @@ def download_latest_models(output_dir: str = ".", model_list: List[str] | None =
     # Filter to YOLO model files
     if model_list is None:
         # Default models
-        model_list = ["yolov8n.pt", "yolov8s.pt", "yolov8m.pt", "yolov8l.pt", "yolov8x.pt"]
+        v = model_major_version # for interpolation into the model names
+        model_list = [f"yolo{v}n.pt", f"yolo{v}s.pt", f"yolo{v}m.pt", f"yolo{v}l.pt", f"yolo{v}x.pt"]
     
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -156,16 +169,28 @@ def main():
         "--models",
         type=str,
         default=None,
-        help="Comma-separated list of specific models to download (e.g., 'yolov8n.pt,yolov8l.pt'). If not specified, all standard models are downloaded."
+        help="Comma-separated list of specific models to download (e.g., 'yolo26n.pt,yolo26l.pt'). If not specified, all standard models are downloaded."
     )
     parser.add_argument(
         "--verbose", "-v",
         action="store_true",
         help="Enable verbose logging."
     )
-    
+    parser.add_argument(
+        "--version",
+        action="store_true",
+        help="Show version and date information for this script and the birdcrop library."
+    )
+
     args = parser.parse_args()
     
+    # --- Handle --version early ---
+    if getattr(args, "version", False):
+        import birdcrop
+        print(f"upgrade_birdcrop.py version:\t{SCRIPT_VERSION}  (date: {SCRIPT_DATE})")
+        print(f"birdcrop library version:\t{birdcrop.__version__}  (date: {getattr(birdcrop, '__date__', 'unknown')})")
+        sys.exit(0)
+
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
     

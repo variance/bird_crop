@@ -41,8 +41,9 @@ class BirdCropper:
     sorting, cropping with margin, flexible output path generation,
     metadata saving, and dry run simulation.
     """
-    def __init__(self, model_path: str = "yolov8n.pt", target_classes: List[Union[str, int]] = None, process_single: bool = True, sort_by: str = "size", margin: int = 0):
+    def __init__(self, model_path: str = "yolo26n.pt", target_classes: List[Union[str, int]] = None, process_single: bool = True, sort_by: str = "size", margin: int = 0):
         self.model_path = model_path; self.process_single = process_single; self.sort_by = sort_by; self.margin = margin
+        self.is_yolo26 = "yolo26" in str(model_path).lower() # yolo26 can benefit from nms=False
         if target_classes is None: target_classes = ['bird']
         if sort_by not in ["confidence", "size"]: raise ValueError("sort_by must be 'confidence' or 'size'")
         if margin < 0: raise ValueError("margin cannot be negative")
@@ -119,7 +120,7 @@ class BirdCropper:
         except Exception as e: logger.error(f"Error reading or processing image {img_path}: {e}"); return [], []
 
         # --- Prediction ---
-        try: results = self.model.predict(source=img, conf=conf, verbose=False)
+        try: results = self.model.predict(source=img, conf=conf, verbose=False, nms=False if self.is_yolo26 else True)
         except Exception as e: logger.error(f"Error during YOLO prediction for {img_path}: {e}"); return [], []
 
         # --- Detection Extraction ---

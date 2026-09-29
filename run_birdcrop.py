@@ -4,21 +4,24 @@
 Command-line script to detect and crop objects from images using the birdcrop library.
 """
 
-SCRIPT_VERSION = "0.3.2"
-SCRIPT_DATE = "2025-06-14"
+SCRIPT_VERSION = "0.3.3"
+SCRIPT_DATE = "2026-09-29"
 
-# Model size mapping for YOLOv8
-_YOLO_URL_PREFIX = "https://github.com/ultralytics/assets/releases/download/v8.1.0/"
-YOLOV8_MODEL_SIZES = {
-    "nano":   ("yolov8n.pt", _YOLO_URL_PREFIX + "yolov8n.pt"),
-    "small":  ("yolov8s.pt", _YOLO_URL_PREFIX + "yolov8s.pt"),
-    "medium": ("yolov8m.pt", _YOLO_URL_PREFIX + "yolov8m.pt"),
-    "large":  ("yolov8l.pt", _YOLO_URL_PREFIX + "yolov8l.pt"),
-    "xlarge": ("yolov8x.pt", _YOLO_URL_PREFIX + "yolov8x.pt"),
+# CAVEAT: The following URL may need to be updated for future releases of ultralytics/assets!
+# The companion script upgrade_birdcrop.py can be used to check for newer releases and download them.
+_YOLO_RELEASE_URL_PREFIX = "https://github.com/ultralytics/assets/releases/download/v8.4.0/"
+
+# Model size mapping for YOLO26
+YOLO_MODEL_SIZES = {
+    "nano":   ("yolo26n.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26n.pt"),
+    "small":  ("yolo26s.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26s.pt"),
+    "medium": ("yolo26m.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26m.pt"),
+    "large":  ("yolo26l.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26l.pt"),
+    "xlarge": ("yolo26x.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26x.pt"),
 }
 
 DEFAULT_MODEL_SIZE = "nano"
-DEFAULT_MODEL_FILENAME, DEFAULT_MODEL_URL = YOLOV8_MODEL_SIZES[DEFAULT_MODEL_SIZE]
+DEFAULT_MODEL_FILENAME, DEFAULT_MODEL_URL = YOLO_MODEL_SIZES[DEFAULT_MODEL_SIZE]
 
 # -------------------------------------------------------------------------- #
 
@@ -226,9 +229,9 @@ def main():
     parser.add_argument("--output-template", "-o", type=str, help="Output path template (Python str.format_map syntax). Available keys include: p, stat, exif, box, cls (id), conf, size, x1, y1, x2, y2, nr (overall crop #), pcnr (per-category crop #), width, height, margin, category (name), etc. Relative paths are anchored to the input image's directory. Default for multiple crops: '{default_output_template}'. Default for single crop: '{default_single_output_template}'.")
     parser.add_argument("--force", "-f", action="store_true", help="Force overwrite existing output files. If not set, existing files will be skipped.")
     # --- Model & Detection Arguments ---
-    parser.add_argument("--model", type=str, default=None, help="Path to the YOLOv8 model file (.pt). If not specified, --model-size is used.")
-    parser.add_argument("--model-size", type=str, choices=YOLOV8_MODEL_SIZES.keys(), default=DEFAULT_MODEL_SIZE,
-                        help="YOLOv8 model size to use if --model is not specified. Choices: " + f"{', '.join(YOLOV8_MODEL_SIZES.keys())}. Default: {DEFAULT_MODEL_SIZE} ({DEFAULT_MODEL_FILENAME}).")
+    parser.add_argument("--model", type=str, default=None, help="Path to the YOLO model file (yolo???.pt). If not specified, --model-size is used.")
+    parser.add_argument("--model-size", type=str, choices=YOLO_MODEL_SIZES.keys(), default=DEFAULT_MODEL_SIZE,
+                        help="YOLO model size to use if --model is not specified.")
     parser.add_argument("--confidence", '-C', type=float, default=0.5, help="Confidence threshold for detection (0.0 to 1.0). Default: 0.5.")
     # --- Class Specification ---
     parser.add_argument("--classes", type=str, default="bird", help='Comma-separated list of class names (e.g., "person,cat,dog") or class IDs (e.g., "0,15,16") to detect. Names are matched against the loaded model\'s class list.')
@@ -274,14 +277,14 @@ def main():
     # --- Handle --version early ---
     if getattr(args, "version", False):
         import birdcrop
-        print(f"run_birdcrop.py version: {SCRIPT_VERSION}\t(date: {SCRIPT_DATE})")
+        print(f"run_birdcrop.py  version: {SCRIPT_VERSION}\t(date: {SCRIPT_DATE})")
         print(f"birdcrop library version: {birdcrop.__version__}\t(date: {getattr(birdcrop, '__date__', 'unknown')})")
         sys.exit(0)
 
     # --- Handle --list-classes early ---
     if args.list_classes:
         if not args.model:
-            parser.error("--list-classes requires --model to be specified (path to a YOLOv8 .pt file).")
+            parser.error("--list-classes requires --model to be specified (path to a 'yolo<VERSION>.pt' file).")
         list_model_classes(args.model)
 
     # --- Adjust Log Level ---
@@ -335,13 +338,13 @@ def main():
         model_path = args.model
         model_url = None
         logger.info(f"Using user-specified model: {model_path}")
-        configured_assets_tag = _YOLO_URL_PREFIX.rstrip('/').split('/')[-1]
+        configured_assets_tag = _YOLO_RELEASE_URL_PREFIX.rstrip('/').split('/')[-1]
         selected_model_filename = Path(model_path).name
     else:
-        model_filename, model_url = YOLOV8_MODEL_SIZES[args.model_size]
+        model_filename, model_url = YOLO_MODEL_SIZES[args.model_size]
         model_path = model_filename
         logger.info(f"No --model specified. Using --model-size '{args.model_size}': {model_filename}")
-        configured_assets_tag = _YOLO_URL_PREFIX.rstrip('/').split('/')[-1]
+        configured_assets_tag = _YOLO_RELEASE_URL_PREFIX.rstrip('/').split('/')[-1]
         selected_model_filename = model_filename
 
     if args.check_updates:
