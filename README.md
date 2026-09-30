@@ -20,23 +20,29 @@ Originally developed to rapidly identify and extract avian subjects from high-sp
 
 ## Installation
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/variance/bird_crop.git
-    cd bird_crop
-    ```
+Install the package and its runtime dependencies from PyPI:
 
-2.  **Install dependencies:**
-    BirdCrop relies on several Python packages. You can install them using pip:
-    ```bash
-    pip install ultralytics opencv-python numpy piexif
-    ```
-    *   `ultralytics`: For the YOLO model loading and prediction.
-    *   `opencv-python`: For image reading, writing, and cropping.
-    *   `numpy`: For numerical operations.
-    *   `piexif`: For reading EXIF metadata from images (used in templating).
+```bash
+python -m pip install bird-crop
+```
 
-3.  **(Optional) Download a YOLO model:** BirdCrop uses `yolo26n.pt` by default. If the selected model is not present, `run_birdcrop.py` downloads it automatically from the Ultralytics assets release. You can select another YOLO26 size with `--model-size` (`nano`, `small`, `medium`, `large`, or `xlarge`), or specify an existing YOLOv8/custom model with `--model`.
+For development from a checkout:
+
+```bash
+git clone https://github.com/variance/bird_crop.git
+cd bird_crop
+python -m pip install .
+```
+
+This installs the `birdcrop` library and the `birdcrop` and `birdcrop-upgrade`
+command-line commands. The legacy `run_birdcrop.py` and
+`upgrade_birdcrop.py` launchers remain available when running from a checkout.
+
+BirdCrop uses `yolo26n.pt` by default. If the selected model is not present,
+the CLI downloads it automatically from the Ultralytics assets release. You
+can select another YOLO26 size with `--model-size` (`nano`, `small`, `medium`,
+`large`, or `xlarge`), or specify an existing YOLOv8/custom model with
+`--model`.
 
 ### Model Selection
 
@@ -57,11 +63,13 @@ When using `--model-size`, a missing model file is downloaded automatically. A u
 
 ## Usage
 
-The main script is `run_birdcrop.py`.
+The installed command is `birdcrop`:
 
 ```bash
-python run_birdcrop.py [options] [INPUT_PATH ...]
+birdcrop [options] [INPUT_PATH ...]
 ```
+
+The equivalent checkout command is `python run_birdcrop.py [options] [INPUT_PATH ...]`.
 
 ## Update Checks
 
@@ -85,29 +93,48 @@ python run_birdcrop.py --update-check-timeout 2.0 [options] [INPUT_PATH ...]
 
 ## Upgrading
 
-To keep BirdCrop and its YOLO models up to date, use the `upgrade_birdcrop.py` utility:
+To keep BirdCrop and its YOLO models up to date, use the `birdcrop-upgrade` command:
 
 ```bash
-# upgrade both package and download latest models
-python upgrade_birdcrop.py
+# upgrade both the ultralytics package and download latest models
+birdcrop-upgrade
 
 # upgrade package only
-python upgrade_birdcrop.py --package-only
+birdcrop-upgrade --package-only
 
 # download latest models only
-python upgrade_birdcrop.py --models-only
+birdcrop-upgrade --models-only
 
 # download specific YOLO26 models
-python upgrade_birdcrop.py --models yolo26n.pt,yolo26l.pt
+birdcrop-upgrade --models yolo26n.pt,yolo26l.pt
 
 # download models to a specific directory
-python upgrade_birdcrop.py --output-dir ./models
+birdcrop-upgrade --output-dir ./models
 
 # verbose output
-python upgrade_birdcrop.py --verbose
+birdcrop-upgrade --verbose
 ```
+
+From a checkout, `python upgrade_birdcrop.py` remains an equivalent launcher.
 
 The upgrade utility:
 - Updates `ultralytics` package via `pip install --upgrade ultralytics`
 - Downloads the latest YOLO model files from the latest [ultralytics/assets](https://github.com/ultralytics/assets) release
 - Skips models that already exist locally (use `--package-only` or `--models-only` to update just one component)
+
+## Building and publishing
+
+To build distributable artifacts locally:
+
+```bash
+python -m pip install build
+python -m build
+```
+
+This creates a source distribution and wheel in `dist/`. After configuring
+your PyPI credentials, upload them with:
+
+```bash
+python -m pip install twine
+python -m twine upload dist/*
+```
