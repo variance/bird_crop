@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bird-crop"
+dynamic = ["version"]
+description = "Detect and crop birds and other objects from images with YOLO models."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Martin Kammerhofer", email = "mkamm@gmx.net" },
+]
+dependencies = [
+    "numpy",
+    "opencv-python",
+    "piexif",
+    "ultralytics",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+
+[project.urls]
+Homepage = "https://github.com/variance/bird_crop"
+Repository = "https://github.com/variance/bird_crop"
+Issues = "https://github.com/variance/bird_crop/issues"
+
+[project.scripts]
+birdcrop = "birdcrop.cli:main"
+birdcrop-upgrade = "birdcrop.upgrade:main"
+
+[tool.setuptools]
+packages = ["birdcrop"]
+
+[tool.setuptools.dynamic]
+version = { attr = "birdcrop.__version__" }

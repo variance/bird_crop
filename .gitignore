@@ -2,3 +2,6 @@
 yolov8?.pt
 yolo26?.pt
 .vscode/
+build/
+dist/
+*.egg-info/
