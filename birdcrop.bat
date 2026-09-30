@@ -4,5 +4,5 @@ REM Adjust the PYTHON executable path and the run_birdcrop.py script path below 
 REM -----------------------------------------------------------------------------
 @echo off
 echo Got argument "%~1"
-"%USERPROFILE%\AppData\Local\Programs\Python\Python313\python.exe" "%USERPROFILE%\Documents\Repositories\bird_crop\run_birdcrop.py" --confidence=0.25 --model-size=large --multiple "%~1"
+"%USERPROFILE%\AppData\Local\Programs\Python\Python313\python.exe" "%USERPROFILE%\Documents\Repositories\bird_crop\run_birdcrop.py" --confidence=0.25 --model-size=large -- "%~1"
 timeout /t 30 /nobreak > NUL
