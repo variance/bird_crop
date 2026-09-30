@@ -4,6 +4,21 @@
 
 Originally developed to rapidly identify and extract avian subjects from high-speed burst photography, the system has since been expanded to support multiple and diverse object classes beyond birds. It excels in its primary application: processing large volumes of in-flight bird imagery where subjects occupy only a small pixel area within the frame. By automating detection and cropping workflows for burst sequences, the tool eliminates time-intensive manual adjustments like zooming and panning while retaining analytical accuracy, making it ideal for rapid wildlife surveys and high-throughput curation of still-image datasets.
 
+<div align="center">
+  <table>
+    <tr>
+      <td align="center" width="50%">
+        <h3>Before (original folder)</h3>
+        <img src="docs/images/vorher.png" alt="image folder before auto-cropping" width="100%">
+      </td>
+      <td align="center" width="50%">
+        <h3>After Cropping (output folder)</h3>
+        <img src="docs/images/nachher.png" alt="image folder after auto-cropping" width="100%">
+      </td>
+    </tr>
+  </table>
+</div>
+
 ## Key Features
 
 *   **YOLO-Powered Detection:** Uses YOLO26 models by default for faster, more accurate bird detection. You can also provide a YOLOv8 or custom model with `--model`.
