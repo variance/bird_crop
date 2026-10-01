@@ -12,7 +12,7 @@ from platformdirs import user_cache_dir
 logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff'} # Keep this
-DEFAULT_MODEL_DIR = Path(user_cache_dir("birdcrop","mkamm")) # use my PyPI username as the author name
+DEFAULT_MODEL_DIR = Path(user_cache_dir("birdcrop","variance")) / "models" # use my github username as the author name
 
 # --- New Function: Safe EXIF Reading ---
 def get_exif_data(image_path: Path) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
