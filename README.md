@@ -55,11 +55,16 @@ This installs the `birdcrop` library and the `birdcrop` and `birdcrop-upgrade`
 command-line commands. The legacy `run_birdcrop.py` and
 `upgrade_birdcrop.py` launchers remain available when running from a checkout.
 
-BirdCrop uses `yolo26n.pt` by default. If the selected model is not present,
-the CLI downloads it automatically from the Ultralytics assets release. You
-can select another YOLO26 size with `--model-size` (`nano`, `small`, `medium`,
+BirdCrop uses `yolo26n.pt` by default. If the selected model is not present in
+the platform-specific BirdCrop user cache directory, the CLI downloads it
+automatically from the Ultralytics assets release. Once downloaded, the model
+is reused by subsequent CLI runs. You can select another YOLO26 size with `--model-size` (`nano`, `small`, `medium`,
 `large`, or `xlarge`), or specify an existing YOLOv8/custom model with
 `--model`.
+
+The default model cache directory is provided by `platformdirs` and depends on
+the operating system. The `birdcrop-upgrade` command uses the same directory
+by default. Use `--output-dir` to download models to a different location.
 
 ### Model Selection
 
@@ -125,7 +130,7 @@ birdcrop-upgrade --models-only
 # download specific YOLO26 models
 birdcrop-upgrade --models yolo26n.pt,yolo26l.pt
 
-# download models to a specific directory
+# download models to a specific directory instead of the default cache
 birdcrop-upgrade --output-dir ./models
 
 # verbose output

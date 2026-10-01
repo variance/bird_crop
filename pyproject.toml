@@ -15,6 +15,7 @@ dependencies = [
     "numpy",
     "opencv-python",
     "piexif",
+    "platformdirs",
     "ultralytics",
 ]
 classifiers = [

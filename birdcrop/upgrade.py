@@ -3,8 +3,8 @@
 Upgrade utility for BirdCrop: updates the ultralytics package and optionally downloads the latest YOLO models.
 """
 
-SCRIPT_VERSION = "0.1.2"
-SCRIPT_DATE = "2026-09-30"
+SCRIPT_VERSION = "0.1.3"
+SCRIPT_DATE = "2026-10-01"
 
 import argparse
 import logging
@@ -15,6 +15,7 @@ from pathlib import Path
 from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
 from typing import Dict, Any, List
+from birdcrop.utils import DEFAULT_MODEL_DIR
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -63,11 +64,12 @@ def upgrade_ultralytics_package():
 
 
 
-def download_latest_models(output_dir: str = ".", model_list: List[str] | None = None, model_major_version: str = "26") -> bool:
+def download_latest_models(output_dir: str | Path = DEFAULT_MODEL_DIR, model_list: List[str] | None = None, model_major_version: str = "26") -> bool:
     """Download the latest YOLO models from the latest GitHub release.
     
     Args:
-        output_dir (str): Directory to download models into.
+        output_dir (str | Path): Directory to download models into. Defaults to
+            the platform-specific BirdCrop user cache directory.
         model_list (List[str] | None): List of model names to download. If None, downloads default models.
         model_major_version (str): The major version of the YOLO models to download (e.g., "26" for YOLO26 or "v8" for YOLOv8).
     Returns:
@@ -162,8 +164,8 @@ def main():
     parser.add_argument(
         "--output-dir",
         type=str,
-        default=".",
-        help="Directory to download models into (default: current directory)."
+        default=str(DEFAULT_MODEL_DIR),
+        help="Directory to download models into."
     )
     parser.add_argument(
         "--models",

@@ -4,8 +4,8 @@
 Command-line script to detect and crop objects from images using the birdcrop library.
 """
 
-SCRIPT_VERSION = "0.3.4"
-SCRIPT_DATE = "2026-09-30"
+SCRIPT_VERSION = "0.3.5"
+SCRIPT_DATE = "2026-10-01"
 
 # CAVEAT: The following URL may need to be updated for future releases of ultralytics/assets!
 # The companion birdcrop-upgrade command can check for newer releases and download them.
@@ -42,6 +42,7 @@ from urllib.error import URLError, HTTPError
 # Import from the library
 from ultralytics import YOLO
 from birdcrop import BirdCropper, find_image_files
+from birdcrop.utils import DEFAULT_MODEL_DIR
 # from birdcrop.exceptions import BirdCropError
 
 # --- Logging Setup ---
@@ -342,8 +343,10 @@ def main():
         selected_model_filename = Path(model_path).name
     else:
         model_filename, model_url = YOLO_MODEL_SIZES[args.model_size]
-        model_path = model_filename
-        logger.info(f"No --model specified. Using --model-size '{args.model_size}': {model_filename}")
+        model_path = str(DEFAULT_MODEL_DIR / model_filename)
+        logger.info(
+            f"No --model specified. Using --model-size '{args.model_size}': {model_path}"
+        )
         configured_assets_tag = _YOLO_RELEASE_URL_PREFIX.rstrip('/').split('/')[-1]
         selected_model_filename = model_filename
 
