@@ -171,7 +171,7 @@ def main():
         "--models",
         type=str,
         default=None,
-        help="Comma-separated list of specific models to download (e.g., 'yolo26n.pt,yolo26l.pt'). If not specified, all standard models are downloaded."
+        help="Comma-separated list of specific models to download (e.g., 'yolo26s.pt,yolo26l.pt'). If not specified, all standard models are downloaded."
     )
     parser.add_argument(
         "--verbose", "-v",

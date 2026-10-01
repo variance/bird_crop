@@ -41,7 +41,7 @@ class BirdCropper:
     sorting, cropping with margin, flexible output path generation,
     metadata saving, and dry run simulation.
     """
-    def __init__(self, model_path: str = "yolo26n.pt", target_classes: List[Union[str, int]] = None, process_single: bool = True, sort_by: str = "size", margin: int = 0):
+    def __init__(self, model_path: str = "yolo26s.pt", target_classes: List[Union[str, int]] = None, process_single: bool = True, sort_by: str = "size", margin: int = 0):
         self.model_path = model_path; self.process_single = process_single; self.sort_by = sort_by; self.margin = margin
         self.is_yolo26 = "yolo26" in str(model_path).lower() # yolo26 can benefit from nms=False
         if target_classes is None: target_classes = ['bird']

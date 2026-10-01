@@ -20,7 +20,7 @@ YOLO_MODEL_SIZES = {
     "xlarge": ("yolo26x.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26x.pt"),
 }
 
-DEFAULT_MODEL_SIZE = "nano"
+DEFAULT_MODEL_SIZE = "small"
 DEFAULT_MODEL_FILENAME, DEFAULT_MODEL_URL = YOLO_MODEL_SIZES[DEFAULT_MODEL_SIZE]
 
 # -------------------------------------------------------------------------- #
