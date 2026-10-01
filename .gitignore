@@ -5,3 +5,4 @@ yolo26?.pt
 build/
 dist/
 *.egg-info/
+API-token*
