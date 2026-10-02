@@ -272,6 +272,11 @@ def main():
         "--update-check-timeout", type=float, default=2.0,
         help="Timeout in seconds for each online update check request."
     )
+    if sys.platform == "win32":
+        parser.add_argument(
+            "--shortcut", action="store_true",
+            help="Indicates a desktop shortcut was used to launch the script."
+        )
 
     args = parser.parse_args()
 
@@ -313,7 +318,19 @@ def main():
     # --- Validate and Find Inputs ---
     all_input_paths_str = expand_input_lists(args.inputs + args.input)
     if not all_input_paths_str:
-        parser.error("No input files or directories specified (and --list-classes not used).")
+        if sys.platform == "win32" and getattr(args, "shortcut", False):
+            print("""BirdCrop Drag & Drop
+            
+            Usage: drag one or more image files or folders onto this file!
+            Example: select a folder in Explorer and drag it onto the BirdCrop shortcut.
+            
+            To process a folder from a command prompt, use:
+            birdcrop "C:\\path\\to\\images"
+            """)
+            input("Press Enter to continue...")
+            sys.exit(0)
+        else:
+            parser.error("No input files or directories specified (and --list-classes not used).")
     logger.info("Searching for image files...")
     image_files_to_process = find_image_files(all_input_paths_str, args.recursive)
     if not image_files_to_process:
@@ -444,6 +461,9 @@ def main():
     logger.info(f"  Output paths generated using template: {args.output_template}")
     logger.info(f"  Total time: {duration:.2f} seconds")
     logger.info("-" * 30)
+
+    if sys.platform == "win32" and getattr(args, "shortcut", False):
+        input("Press Enter to continue...")  # Pause to allow user to see the summary when launched from a Windows shortcut
 
 if __name__ == "__main__":
     main()

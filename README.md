@@ -51,9 +51,37 @@ cd bird_crop
 python -m pip install .
 ```
 
-This installs the `birdcrop` library and the `birdcrop` and `birdcrop-upgrade`
-command-line commands. The legacy `run_birdcrop.py` and
+This installs the `birdcrop` library and the `birdcrop`, `birdcrop-upgrade`,
+and `birdcrop-setup` command-line commands. The legacy `run_birdcrop.py` and
 `upgrade_birdcrop.py` launchers remain available when running from a checkout.
+
+### Windows Drag & Drop
+
+On Windows, run the optional setup command once to create a `BirdCrop.lnk`
+desktop shortcut:
+
+```powershell
+birdcrop-setup
+```
+
+Images or folders can then be dragged onto the shortcut. The shortcut uses the
+Python interpreter from the environment in which `birdcrop-setup` was run, so
+it does not depend on the Windows `PATH`. The installed batch launcher also
+resolves the interpreter relative to the package installation when possible.
+Calling the batch file without arguments prints usage examples instead of
+starting a crop operation.
+
+The shortcut is an optional user-created file and cannot be removed reliably
+by `pip uninstall`, because pip has no package uninstall hook. Before
+uninstalling on Windows, remove an unchanged shortcut safely with:
+
+```powershell
+birdcrop-setup --remove-shortcut
+python -m pip uninstall bird-crop
+```
+
+If the shortcut was changed to point somewhere else, the cleanup command keeps
+it and reports the reason.
 
 BirdCrop uses the small model size (`yolo26s.pt`) by default. If the selected model is not present in
 the platform-specific BirdCrop user cache directory, the CLI downloads it

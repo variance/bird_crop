@@ -16,6 +16,7 @@ dependencies = [
     "opencv-python",
     "piexif",
     "platformdirs",
+    "pywin32; sys_platform == 'win32'",
     "ultralytics",
 ]
 classifiers = [
@@ -28,7 +29,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Image Recognition",
 ]
 license = "MIT"
-license-files = ["LICEN[CS]E*"]
+license-files = ["LICENSE*"]
 
 [project.urls]
 Homepage = "https://github.com/variance/bird_crop"
@@ -38,9 +39,13 @@ Issues = "https://github.com/variance/bird_crop/issues"
 [project.scripts]
 birdcrop = "birdcrop.cli:main"
 birdcrop-upgrade = "birdcrop.upgrade:main"
+birdcrop-setup = "birdcrop.setup:main"
 
 [tool.setuptools]
 packages = ["birdcrop"]
+
+[tool.setuptools.package-data]
+birdcrop = ["*.bat"]
 
 [tool.setuptools.dynamic]
 version = { attr = "birdcrop.__version__" }
