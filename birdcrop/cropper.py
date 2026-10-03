@@ -210,14 +210,22 @@ class BirdCropper:
                             # --- Preserve EXIF data if requested and available ---
                             if preserve_exif and raw_exif_for_saving and output_crop_path.suffix.lower() in ['.jpg', '.jpeg', '.tif', '.tiff']:
                                 try:
-                                    # Check if there's substantive EXIF data to write (excluding empty IFDs or just thumbnail)
-                                    if any(raw_exif_for_saving.get(ifd_name, {}) for ifd_name in ["0th", "Exif", "GPS", "Interop", "1st"]):
-                                        exif_bytes = piexif.dump(raw_exif_for_saving)
-                                        if exif_bytes: # Ensure exif_bytes is not empty
+                                    # Kopie erstellen, um das Original-Dict nicht zu verändern
+                                    exif_to_save = raw_exif_for_saving.copy()
+                                    
+                                    # Alte EXIF-Vorschaubilder des Originalbildes entfernen
+                                    exif_to_save.pop("1st", None)
+                                    exif_to_save.pop("thumbnail", None)
+
+                                    if any(exif_to_save.get(ifd_name, {}) for ifd_name in ["0th", "Exif", "GPS", "Interop"]):
+                                        exif_bytes = piexif.dump(exif_to_save)
+                                        if exif_bytes:
                                             piexif.insert(exif_bytes, str(output_crop_path))
                                             logger.info(f"Preserved EXIF data in: {output_crop_path}")
-                                        else: logger.debug(f"EXIF data for {img_path.name} was empty after dump, not inserting into {output_crop_path.name}")
-                                    else: logger.debug(f"No substantive EXIF data found in {img_path.name} to preserve for {output_crop_path.name}.")
+                                        else:
+                                            logger.debug(f"EXIF data for {img_path.name} was empty after dump, not inserting into {output_crop_path.name}")
+                                    else:
+                                        logger.debug(f"No substantive EXIF data found in {img_path.name} to preserve for {output_crop_path.name}.")
                                 except Exception as exif_e:
                                     logger.error(f"Failed to preserve EXIF data for {output_crop_path}: {exif_e}")
                         else:
