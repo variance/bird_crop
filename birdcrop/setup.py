@@ -7,12 +7,13 @@ import importlib
 import os
 import sys
 from pathlib import Path
+from importlib.resources import files
 
 SHORTCUT_NAME = "BirdCrop.lnk"
 BATCH_FILENAME = "birdcrop-dragdrop.bat"
 # User may tweak the birdcrop arguments after -m birdcrop --shortcut below.
 # This can be edited in the shortcut properties after creation, but the default is set here.
-PYTHON_ARGUMENTS = "-m birdcrop --shortcut --confidence 0.33 --"
+PYTHON_ARGUMENTS = "-m birdcrop --shortcut --confidence 0.50 --"
 
 
 def _windows_components():
@@ -90,8 +91,8 @@ def create_shortcut() -> int:
         shortcut.Arguments = shortcut_arguments
         shortcut.WorkingDirectory = str(batch_path.parent)
         shortcut.Description = "BirdCrop: process images by drag and drop"
-        # Optik: Das Icon direkt aus der Python.exe extrahieren
-        shortcut.IconLocation = str(python_path) + ",0" 
+        ico_path = files("birdcrop").joinpath("bird-crop.ico") # das mitinstallierte Icon im Paket
+        shortcut.IconLocation = str(ico_path)
         shortcut.Save()
     except Exception as exc:
         print(f"Could not create the desktop shortcut: {exc}", file=sys.stderr)
@@ -143,7 +144,7 @@ def main() -> int:
         description="Create or remove the optional BirdCrop desktop shortcut on Windows."
     )
     parser.add_argument(
-        "--remove-shortcut",
+        "--remove-shortcut", "-R",
         action="store_true",
         help="Remove the unchanged BirdCrop shortcut from the desktop.",
     )

@@ -15,6 +15,7 @@ dependencies = [
     "numpy",
     "opencv-python",
     "piexif",
+    "Pillow",
     "platformdirs",
     "pywin32; sys_platform == 'win32'",
     "ultralytics",
@@ -43,9 +44,10 @@ birdcrop-setup = "birdcrop.setup:main"
 
 [tool.setuptools]
 packages = ["birdcrop"]
+include-package-data = true
 
 [tool.setuptools.package-data]
-birdcrop = ["*.bat"]
+birdcrop = ["*.bat", "*.ico"]
 
 [tool.setuptools.dynamic]
 version = { attr = "birdcrop.__version__" }

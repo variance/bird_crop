@@ -23,7 +23,7 @@ Originally developed to rapidly identify and extract avian subjects from high-sp
 
 ## Key Features
 
-*   **YOLO-Powered Detection:** Uses YOLO26 models by default for faster, more accurate bird detection. You can also provide a YOLOv8 or custom model with `--model`.
+*   **YOLO-Powered Detection:** Uses YOLO26 models by default for faster, more accurate bird detection. Existing models in the shared cache are reused automatically; you can also provide a YOLOv8 or custom model with `--model`.
 *   **Flexible Class Targeting:** Specify which object classes to detect using their names (e.g., `"bird,dog,cat"`) or their model-specific IDs (e.g., `"14,16,15"`). The tool adapts to the classes present in the loaded model.
 *   **List Model Classes:** Easily list all classes and their IDs available within a specific YOLO model file using the `--list-classes` option.
 *   **Customizable Output Paths:** Define complex output file paths and names using Python's format string syntax via `--output-template`. Access detailed information about the input file, detection, and crop (see Template Variables below).
@@ -33,6 +33,7 @@ Originally developed to rapidly identify and extract avian subjects from high-sp
 *   **Per-Category Numbering:** Use the `{pcnr}` template variable for sequential numbering *within* each category for a given input image.
 *   **Directory Processing:** Process all supported images within specified directories, optionally searching recursively (`-r`).
 *   **Concurrent Processing:** Speed up processing on multi-core systems using parallel worker threads (`-w`).
+*   **EXIF-Aware Orientation:** Physically orients input images according to their EXIF orientation before detection and keeps saved crops consistently oriented.
 *   **Overwrite Control:** Prevent accidental data loss by default; use `--force` (`-f`) to allow overwriting existing crop files.
 
 ## Installation
@@ -69,7 +70,9 @@ Python interpreter from the environment in which `birdcrop-setup` was run, so
 it does not depend on the Windows `PATH`. The installed batch launcher also
 resolves the interpreter relative to the package installation when possible.
 Calling the batch file without arguments prints usage examples instead of
-starting a crop operation.
+starting a crop operation. The legacy batch launcher is retained for direct
+drag-and-drop use but is deprecated; new shortcuts are launched through
+`cmd.exe` and the configured Python environment.
 
 The shortcut is an optional user-created file and cannot be removed reliably
 by `pip uninstall`, because pip has no package uninstall hook. Before
@@ -96,7 +99,10 @@ by default. Use `--output-dir` to download models to a different location.
 
 ### Model Selection
 
-The default model is `yolo26s.pt`. Use `--model-size` to choose another YOLO26 model:
+The default model is `yolo26s.pt`. If no model option is supplied, BirdCrop
+first reuses the best matching model already in the cache (preferring larger
+models), then downloads `yolo26s.pt` if the cache is empty. Use `--model-size`
+to explicitly choose another YOLO26 model:
 
 ```bash
 # default: yolo26s.pt
@@ -110,6 +116,11 @@ python run_birdcrop.py --model path/to/model.pt path/to/images
 ```
 
 When using `--model-size`, a missing model file is downloaded automatically. A user-specified `--model` must already exist locally.
+
+When more than one target class is selected, the default output template
+creates category-specific crop paths so results do not overwrite one another.
+Use `--multiple` or its short form `-m` to save all detections, and
+`--save-metadata` or `-M` to save JSON metadata alongside crops.
 
 ## Usage
 

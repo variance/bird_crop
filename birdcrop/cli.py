@@ -4,24 +4,8 @@
 Command-line script to detect and crop objects from images using the birdcrop library.
 """
 
-SCRIPT_VERSION = "0.3.5"
-SCRIPT_DATE = "2026-10-01"
-
-# CAVEAT: The following URL may need to be updated for future releases of ultralytics/assets!
-# The companion birdcrop-upgrade command can check for newer releases and download them.
-_YOLO_RELEASE_URL_PREFIX = "https://github.com/ultralytics/assets/releases/download/v8.4.0/"
-
-# Model size mapping for YOLO26
-YOLO_MODEL_SIZES = {
-    "nano":   ("yolo26n.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26n.pt"),
-    "small":  ("yolo26s.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26s.pt"),
-    "medium": ("yolo26m.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26m.pt"),
-    "large":  ("yolo26l.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26l.pt"),
-    "xlarge": ("yolo26x.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26x.pt"),
-}
-
-DEFAULT_MODEL_SIZE = "small"
-DEFAULT_MODEL_FILENAME, DEFAULT_MODEL_URL = YOLO_MODEL_SIZES[DEFAULT_MODEL_SIZE]
+SCRIPT_VERSION = "0.3.6"
+SCRIPT_DATE = "2026-10-03"
 
 # -------------------------------------------------------------------------- #
 
@@ -42,8 +26,7 @@ from urllib.error import URLError, HTTPError
 # Import from the library
 from ultralytics import YOLO
 from birdcrop import BirdCropper, find_image_files
-from birdcrop.utils import DEFAULT_MODEL_DIR
-# from birdcrop.exceptions import BirdCropError
+from birdcrop.utils import DEFAULT_MODEL_DIR, DEFAULT_MODEL_SIZE, YOLO_MODEL_SIZES, _YOLO_RELEASE_URL_PREFIX, find_best_local_model
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -227,19 +210,24 @@ def main():
     parser.add_argument("--input", "-i", type=str, action='append', default=[], help="Specify an input file or directory (can be used multiple times).")
     parser.add_argument("--recursive", "-r", action="store_true", help="Recursively search input directories for images.")
     # --- Output Arguments ---
-    parser.add_argument("--output-template", "-o", type=str, help="Output path template (Python str.format_map syntax). Available keys include: p, stat, exif, box, cls (id), conf, size, x1, y1, x2, y2, nr (overall crop #), pcnr (per-category crop #), width, height, margin, category (name), etc. Relative paths are anchored to the input image's directory. Default for multiple crops: '{default_output_template}'. Default for single crop: '{default_single_output_template}'.")
+    parser.add_argument("--output-template", "-o", type=str, help="Output path template (Python str.format_map syntax). Available keys include:"
+                         " p, stat, exif, box, cls (id), conf, size, x1, y1, x2, y2, nr (overall crop #), pcnr (per-category crop #), width, height, margin, category (name), etc."
+                         " Relative paths are anchored to the input image's directory."
+                         f" Default for multiple crops or multiple classes: '{default_output_template}' else '{default_single_output_template}'.")
     parser.add_argument("--force", "-f", action="store_true", help="Force overwrite existing output files. If not set, existing files will be skipped.")
     # --- Model & Detection Arguments ---
-    parser.add_argument("--model", type=str, default=None, help="Path to the YOLO model file (yolo???.pt). If not specified, --model-size is used.")
-    parser.add_argument("--model-size", type=str, choices=YOLO_MODEL_SIZES.keys(), default=DEFAULT_MODEL_SIZE,
-                        help="YOLO model size to use if --model is not specified.")
+    parser.add_argument("--model", type=str, default=None, help="Path to the YOLO model file (yolo???.pt)."
+                        f" If not specified, the --model-size and the default model directory '{DEFAULT_MODEL_DIR}' will be used.")
+    parser.add_argument("--model-size", type=str, choices=YOLO_MODEL_SIZES.keys(), default=None,
+                        help=f"YOLO model size to use if --model is not specified. Defaults to '{DEFAULT_MODEL_SIZE}' if no local model is found.")
     parser.add_argument("--confidence", '-C', type=float, default=0.5, help="Confidence threshold for detection (0.0 to 1.0). Default: 0.5.")
     # --- Class Specification ---
-    parser.add_argument("--classes", type=str, default="bird", help='Comma-separated list of class names (e.g., "person,cat,dog") or class IDs (e.g., "0,15,16") to detect. Names are matched against the loaded model\'s class list.')
+    parser.add_argument("--classes", type=str, default="bird", help='Comma-separated list of class names (e.g., "person,cat,dog") or class IDs (e.g., "0,15,16") to detect.'
+                        ' Names are matched against the loaded model\'s class list.')
     parser.add_argument("--list-classes", action="store_true", help="List the classes available in the specified --model and exit.")
     parser.add_argument("--margin", type=int, default=5, help="Pixel margin to add around the detected bounding box before cropping.")
     # --- Processing Arguments ---
-    parser.add_argument("--multiple", dest='single', action='store_false', help="Process and save ALL detected objects per image. Default is to save only the best one.")
+    parser.add_argument("--multiple", "-m", dest='single', action='store_false', help="Process and save ALL detected objects per image. Default is to save only the best one.")
     parser.add_argument("--sortby", type=str, default="size", choices=["confidence", "size"], help="Criterion to sort detections ('confidence' or 'size'). Determines the 'best' object in single mode.")
     parser.add_argument("--workers", "-w", type=int, default=default_workers, help="Number of parallel worker threads for processing images.")
     parser.add_argument('--verbose', '-v', action='count', default=0, help="Increase logging verbosity (e.g., -v for DEBUG, default INFO).")
@@ -249,7 +237,7 @@ def main():
         help="Simulate processing and show what files would be created without writing anything."
     )
     parser.add_argument(
-        "--save-metadata", action="store_true",
+        "--save-metadata", '-M', action="store_true",
         help="Save detection metadata (bounding box, confidence, etc.) as a JSON file alongside each crop."
     )
     parser.add_argument(
@@ -306,14 +294,14 @@ def main():
     if args.dry_run: logger.info("--- DRY RUN MODE ENABLED ---")
 
 
-    # --- Set default output template ---
-    if args.output_template is None:
-        args.output_template = default_single_output_template if args.single else default_output_template
-
     # --- Parse --classes argument ---
     target_classes_input = parse_classes_arg(args.classes)
     if not target_classes_input:
         parser.error("No target classes specified or parsed from --classes argument.")
+
+    # --- Set default output template ---
+    if args.output_template is None:
+        args.output_template = default_single_output_template if args.single and len(target_classes_input) == 1 else default_output_template
 
     # --- Validate and Find Inputs ---
     all_input_paths_str = expand_input_lists(args.inputs + args.input)
@@ -352,20 +340,40 @@ def main():
     logger.info(f"Number of workers: {args.workers}")
 
     # --- Model selection and auto-download ---
+    model_url = None
+
     if args.model:
+        # Fall 1: Benutzer hat explizit einen Pfad mit --model angegeben
         model_path = args.model
-        model_url = None
         logger.info(f"Using user-specified model: {model_path}")
         configured_assets_tag = _YOLO_RELEASE_URL_PREFIX.rstrip('/').split('/')[-1]
         selected_model_filename = Path(model_path).name
-    else:
+
+    elif args.model_size:
+        # Fall 2: Benutzer hat explizit eine Modellgröße via --model-size gewählt
         model_filename, model_url = YOLO_MODEL_SIZES[args.model_size]
         model_path = str(DEFAULT_MODEL_DIR / model_filename)
-        logger.info(
-            f"No --model specified. Using --model-size '{args.model_size}': {model_path}"
-        )
+        logger.info(f"Using explicitly requested --model-size '{args.model_size}': {model_path}")
         configured_assets_tag = _YOLO_RELEASE_URL_PREFIX.rstrip('/').split('/')[-1]
         selected_model_filename = model_filename
+
+    else:
+        # Fall 3: Weder --model noch --model-size wurden angegeben -> Erst lokal suchen
+        found_local = find_best_local_model(DEFAULT_MODEL_DIR)
+        
+        if found_local:
+            model_filename, found_size = found_local
+            model_path = str(DEFAULT_MODEL_DIR / model_filename)
+            logger.info(f"No model specified. Found existing local model '{model_filename}' (size: {found_size}) in {DEFAULT_MODEL_DIR}")
+            configured_assets_tag = _YOLO_RELEASE_URL_PREFIX.rstrip('/').split('/')[-1]
+            selected_model_filename = model_filename
+        else:
+            # Fallback: Kein lokales Modell vorhanden -> Default-Modell (small) festlegen
+            model_filename, model_url = YOLO_MODEL_SIZES[DEFAULT_MODEL_SIZE]
+            model_path = str(DEFAULT_MODEL_DIR / model_filename)
+            logger.info(f"No local model found in {DEFAULT_MODEL_DIR}. Defaulting to --model-size '{DEFAULT_MODEL_SIZE}': {model_path}")
+            configured_assets_tag = _YOLO_RELEASE_URL_PREFIX.rstrip('/').split('/')[-1]
+            selected_model_filename = model_filename
 
     if args.check_updates:
         if args.update_check_timeout <= 0:
@@ -449,6 +457,11 @@ def main():
     logger.info("-" * 30)
     logger.info(f"Processing Summary:")
     logger.info(f"  Mode: {'DRY RUN' if args.dry_run else 'Execution'}")
+    logger.info(f"  Model used: {model_path}")
+    logger.info(f"  Confidence threshold: {args.confidence}")
+    logger.info(f"  Target classes: {args.classes}")
+    logger.info(f"  {'Single best detection' if args.single else 'All detections'} per image")
+    logger.info(f"  Margin: {args.margin}px")
     logger.info(f"  Processed {processed_files_count}/{len(image_files_to_process)} images.")
     if args.dry_run:
         logger.info(f"  (Dry run: Would have potentially saved {total_crops_saved} crop(s) and {total_metadata_saved} metadata file(s))")

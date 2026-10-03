@@ -13,7 +13,7 @@ from typing import List, Dict, Any, Optional, Set, Union, Tuple # Added Tuple
 from collections import defaultdict
 
 # Import utility functions
-from .utils import generate_output_path, get_exif_data
+from .utils import load_and_orient_image, generate_output_path, get_exif_data
 
 logger = logging.getLogger(__name__)
 
@@ -113,8 +113,11 @@ class BirdCropper:
         raw_exif_for_saving, exif_info_for_template = get_exif_data(img_path)
 
         try:
-            img = cv2.imread(str(img_path))
-            if img is None: logger.error(f"Could not read image: {img_path}"); return [], []
+            # Bild einlesen mit physischer Auto-Rotation
+            img = load_and_orient_image(img_path)
+            if img is None:
+                logger.error(f"Could not load or orient image: {img_path}")
+                return [], []
             img_height, img_width = img.shape[:2]
             logger.debug(f"Processing image: {img_path} ({img_width}x{img_height})")
         except Exception as e: logger.error(f"Error reading or processing image {img_path}: {e}"); return [], []
@@ -210,12 +213,28 @@ class BirdCropper:
                             # --- Preserve EXIF data if requested and available ---
                             if preserve_exif and raw_exif_for_saving and output_crop_path.suffix.lower() in ['.jpg', '.jpeg', '.tif', '.tiff']:
                                 try:
-                                    # Kopie erstellen, um das Original-Dict nicht zu verändern
                                     exif_to_save = raw_exif_for_saving.copy()
                                     
-                                    # Alte EXIF-Vorschaubilder des Originalbildes entfernen
+                                    # 1. Alte Vorschaubilder entfernen
                                     exif_to_save.pop("1st", None)
                                     exif_to_save.pop("thumbnail", None)
+
+                                    # 2. Pixeldimensionen entfernen
+                                    for ifd in ["0th", "Exif"]:
+                                        if ifd in exif_to_save:
+                                            exif_to_save[ifd].pop(piexif.ImageIFD.ImageWidth, None)
+                                            exif_to_save[ifd].pop(piexif.ImageIFD.ImageLength, None)
+                                            exif_to_save[ifd].pop(piexif.ExifIFD.PixelXDimension, None)
+                                            exif_to_save[ifd].pop(piexif.ExifIFD.PixelYDimension, None)
+
+                                    # 3. AF-Bereiche entfernen
+                                    if "Exif" in exif_to_save:
+                                        exif_to_save["Exif"].pop(piexif.ExifIFD.SubjectArea, None)
+                                        exif_to_save["Exif"].pop(piexif.ExifIFD.SubjectLocation, None)
+
+                                    # 4. WICHTIG: Orientation auf 1 setzen, da das Bild physisch rotiert wurde!
+                                    if "0th" in exif_to_save:
+                                        exif_to_save["0th"][piexif.ImageIFD.Orientation] = 1
 
                                     if any(exif_to_save.get(ifd_name, {}) for ifd_name in ["0th", "Exif", "GPS", "Interop"]):
                                         exif_bytes = piexif.dump(exif_to_save)

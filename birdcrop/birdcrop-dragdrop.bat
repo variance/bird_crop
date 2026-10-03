@@ -5,6 +5,10 @@ rem BirdCrop Drag & Drop launcher for Windows.
 rem Drop one or more image files or folders onto this file or its desktop shortcut.
 rem The interpreter is resolved relative to this installed package when possible.
 
+rem DEPRECATION WARNING
+rem This legacy Batchfile is no longer used by "birdcrop-setup".
+rem It might be removed from future bird-crop releases.
+
 if "%~1"=="" (
     echo BirdCrop Drag ^& Drop
     echo.
@@ -20,10 +24,10 @@ set "python_exe=%~dp0..\..\..\Scripts\python.exe"
 if not exist "%python_exe%" set "python_exe=%~dp0..\..\..\python.exe"
 
 if exist "%python_exe%" (
-    "%python_exe%" -m birdcrop --confidence 0.33 -- %*
+    "%python_exe%" -m birdcrop --confidence 0.50 -- %*
 ) else (
     rem Fallback for unusual installations where the interpreter is on PATH.
-    python -m birdcrop --confidence 0.33 -- %*
+    python -m birdcrop --confidence 0.50 -- %*
 )
 set "exit_code=%ERRORLEVEL%"
 

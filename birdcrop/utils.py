@@ -1,20 +1,76 @@
 # birdcrop/utils.py
 """Utility functions for the birdcrop library."""
 
-import os
+# CAVEAT: The following URL may need to be updated for future releases of ultralytics/assets!
+# The companion birdcrop-upgrade command can check for newer releases and download them.
+_YOLO_RELEASE_URL_PREFIX = "https://github.com/ultralytics/assets/releases/download/v8.4.0/"
+
+# Model size mapping for YOLO26
+YOLO_MODEL_SIZES = {
+    "nano":   ("yolo26n.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26n.pt"),
+    "small":  ("yolo26s.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26s.pt"),
+    "medium": ("yolo26m.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26m.pt"),
+    "large":  ("yolo26l.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26l.pt"),
+    "xlarge": ("yolo26x.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26x.pt"),
+}
+
+DEFAULT_MODEL_SIZE = "small"  # we do not force larger models by default; small is a good balance of speed and accuracy 
+DEFAULT_MODEL_FILENAME, DEFAULT_MODEL_URL = YOLO_MODEL_SIZES[DEFAULT_MODEL_SIZE]
+
+import sys
+import cv2
+import numpy as np
 import piexif # Import piexif
 import piexif.helper # For user comments
 from pathlib import Path
 import logging
 from typing import List, Set, Dict, Any, Optional, Tuple
 from platformdirs import user_cache_dir
+from PIL import Image, ImageOps
 
 logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff'} # Keep this
 DEFAULT_MODEL_DIR = Path(user_cache_dir("birdcrop","variance")) / "models" # use my github username as the author name
 
-# --- New Function: Safe EXIF Reading ---
+
+def find_best_local_model(model_dir: Path = DEFAULT_MODEL_DIR) -> Tuple[str, str] | None:
+    """
+    Sucht im angegebenen Ordner nach dem besten vorhandenen YOLO-Modell.
+    Bevorzugt größere/genauere Modelle, falls mehrere existieren.
+    Rückgabe: Tuple (model_filename, model_size_key) oder None.
+    """
+    if not model_dir.is_dir():
+        return None
+
+    # Präferenzreihenfolge für die automatische Erkennung vorhandener Modelle
+    preference_order = ["xlarge", "large", "medium", "small", "nano"]
+    
+    for size in preference_order:
+        filename, _ = YOLO_MODEL_SIZES[size]
+        if (model_dir / filename).is_file():
+            return filename, size
+            
+    return None
+
+
+# Helper function to --- load and orient an image based on EXIF data ---.
+# Correct orientation is important for object detection with YOLO, as the model expects images in the correct orientation!
+def load_and_orient_image(img_path: Path) -> Optional[np.ndarray]:
+    """Liest ein Bild ein und wendet die EXIF-Orientation physisch an."""
+    try:
+        with Image.open(img_path) as pil_img:
+            # Rotiert das Bild physisch basierend auf EXIF Tag 0x0112
+            transposed_img = ImageOps.exif_transpose(pil_img)
+            # Konvertiere von PIL (RGB) zu OpenCV (BGR)
+            img_bgr = cv2.cvtColor(np.array(transposed_img), cv2.COLOR_RGB2BGR)
+            return img_bgr
+    except Exception as e:
+        logger.error(f"Error reading/orienting image {img_path}: {e}")
+        return None
+
+
+# --- Safe EXIF Reading ---
 def get_exif_data(image_path: Path) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """
     Attempts to read EXIF data from an image file.
@@ -206,3 +262,26 @@ def find_image_files(input_paths: List[str], recursive: bool) -> List[Path]:
     sorted_files = sorted(list(image_files))
     logger.info(f"Found {len(sorted_files)} unique image file(s) to process.")
     return sorted_files
+
+# -------------------------------------------------------------------------------
+
+# one-shot utility to build a Windows icon from a PNG file
+def build_windows_icon(png_path: str, ico_path: str):
+    img = Image.open(png_path)
+    # Erzeugt eine Multi-Resolution-ICO für Windows (16x16 bis 256x256)
+    icon_sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+    img.save(ico_path, format="ICO", sizes=icon_sizes)
+    print(f"Icon saved as '{ico_path}'")
+
+def main():
+    if len(sys.argv) == 4 and sys.argv[1] == "build_icon":
+        png_path = sys.argv[2]
+        ico_path = sys.argv[3]
+        build_windows_icon(png_path, ico_path)
+        return 0
+    else:
+        print("Usage: python utils.py build_icon <input_png> <output_ico>")
+        return 1
+    
+if __name__ == "__main__":
+    sys.exit(main())
