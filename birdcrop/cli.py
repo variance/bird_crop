@@ -196,6 +196,7 @@ def main():
     """Parses arguments and runs the bird cropping process."""
     cpu_count = os.cpu_count() or 0
     default_workers = min(8, cpu_count + 4)
+    cli_args_str = " ".join(sys.argv[1:])
 
     # --- Default Output Templates ---
     default_output_template = "{p.parent}/{category}/{p.stem}_crop_{nr}.jpg"
@@ -222,9 +223,9 @@ def main():
                         help=f"YOLO model size to use if --model is not specified. Defaults to '{DEFAULT_MODEL_SIZE}' if no local model is found.")
     parser.add_argument("--confidence", '-C', type=float, default=0.5, help="Confidence threshold for detection (0.0 to 1.0). Default: 0.5.")
     # --- Class Specification ---
-    parser.add_argument("--classes", type=str, default="bird", help='Comma-separated list of class names (e.g., "person,cat,dog") or class IDs (e.g., "0,15,16") to detect.'
+    parser.add_argument("--classes", '-c', type=str, default="bird", help='Comma-separated list of class names (e.g., "person,car,cat,dog") or class IDs (e.g., "0,2,15,16") to detect.'
                         ' Names are matched against the loaded model\'s class list.')
-    parser.add_argument("--list-classes", action="store_true", help="List the classes available in the specified --model and exit.")
+    parser.add_argument("--list-classes", '-l', action="store_true", help="List the classes available in the specified --model and exit.")
     parser.add_argument("--margin", type=int, default=5, help="Pixel margin to add around the detected bounding box before cropping.")
     # --- Processing Arguments ---
     parser.add_argument("--multiple", "-m", dest='single', action='store_false', help="Process and save ALL detected objects per image. Default is to save only the best one.")
@@ -295,25 +296,33 @@ def main():
 
 
     # --- Parse --classes argument ---
-    target_classes_input = parse_classes_arg(args.classes)
+    if args.classes and args.classes.strip().lower() == "all":
+        logger.info("Target classes set to 'ALL'. All classes in the model will be processed.")
+        target_classes_input = "ALL"
+        args.all_classes = True
+    else:
+        target_classes_input = parse_classes_arg(args.classes)
+        args.all_classes = False
     if not target_classes_input:
         parser.error("No target classes specified or parsed from --classes argument.")
 
     # --- Set default output template ---
     if args.output_template is None:
-        args.output_template = default_single_output_template if args.single and len(target_classes_input) == 1 else default_output_template
+        args.output_template = default_single_output_template if args.single and len(target_classes_input) == 1 and not args.all_classes else default_output_template
 
     # --- Validate and Find Inputs ---
     all_input_paths_str = expand_input_lists(args.inputs + args.input)
     if not all_input_paths_str:
         if sys.platform == "win32" and getattr(args, "shortcut", False):
-            print("""BirdCrop Drag & Drop
+            print(f"""BirdCrop Drag & Drop
             
             Usage: drag one or more image files or folders onto this file!
             Example: select a folder in Explorer and drag it onto the BirdCrop shortcut.
             
             To process a folder from a command prompt, use:
             birdcrop "C:\\path\\to\\images"
+            Use birdcrop --help for more options.
+            Shortcut command line arguments: {cli_args_str}
             """)
             input("Press Enter to continue...")
             sys.exit(0)
@@ -328,11 +337,11 @@ def main():
     # --- Log Configuration ---
     logger.info(f"Processing {len(image_files_to_process)} image(s).")
     logger.info(f"Using model: {args.model}")
-    logger.info(f"Target classes: {args.classes}")
+    logger.info(f"Target classes: {'ALL' if args.all_classes else args.classes}")
     logger.info(f"Confidence threshold: {args.confidence}")
     logger.info(f"Margin: {args.margin}px")
     logger.info(f"Process single best detection per image: {args.single}")
-    if args.single or len(target_classes_input) > 1: logger.info(f"Sorting criterion: {args.sortby}")
+    if not args.single or len(target_classes_input) > 1 or args.all_classes: logger.info(f"Sorting criterion: {args.sortby}")
     logger.info(f"Output template: {args.output_template}")
     logger.info(f"Force overwrite: {args.force}")
     logger.info(f"Save metadata: {args.save_metadata}") # Log new option
@@ -401,7 +410,7 @@ def main():
         logger.info("Loading detection model...")
         cropper = BirdCropper(
             model_path=model_path, target_classes=target_classes_input,
-            process_single=args.single, sort_by=args.sortby, margin=args.margin
+            process_single=args.single, sort_by=args.sortby, margin=args.margin, all_classes=args.all_classes
         )
         logger.info(f"Model '{model_path}' loaded. Targeting class IDs: {sorted(list(cropper.target_class_ids))}")
     except ValueError as e: logger.error(f"Configuration error: {e}"); exit(1)
@@ -459,7 +468,7 @@ def main():
     logger.info(f"  Mode: {'DRY RUN' if args.dry_run else 'Execution'}")
     logger.info(f"  Model used: {model_path}")
     logger.info(f"  Confidence threshold: {args.confidence}")
-    logger.info(f"  Target classes: {args.classes}")
+    logger.info(f"  Target classes: {','.join(cropper.target_class_names)}")
     logger.info(f"  {'Single best detection' if args.single else 'All detections'} per image")
     logger.info(f"  Margin: {args.margin}px")
     logger.info(f"  Processed {processed_files_count}/{len(image_files_to_process)} images.")

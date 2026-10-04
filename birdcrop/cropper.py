@@ -41,30 +41,38 @@ class BirdCropper:
     sorting, cropping with margin, flexible output path generation,
     metadata saving, and dry run simulation.
     """
-    def __init__(self, model_path: str = "yolo26s.pt", target_classes: List[Union[str, int]] = None, process_single: bool = True, sort_by: str = "size", margin: int = 0):
-        self.model_path = model_path; self.process_single = process_single; self.sort_by = sort_by; self.margin = margin
+    def __init__(self, model_path: str = "yolo26s.pt", target_classes: List[Union[str, int]] = None, process_single: bool = True, sort_by: str = "size", margin: int = 0, all_classes: bool = False):
+        self.model_path = model_path; self.process_single = process_single; self.sort_by = sort_by; self.margin = margin; self.all_classes = all_classes
         self.is_yolo26 = "yolo26" in str(model_path).lower() # yolo26 can benefit from nms=False
         if target_classes is None: target_classes = ['bird']
         if sort_by not in ["confidence", "size"]: raise ValueError("sort_by must be 'confidence' or 'size'")
         if margin < 0: raise ValueError("margin cannot be negative")
-        if not isinstance(target_classes, list) or not target_classes: raise ValueError("target_classes must be a non-empty list")
-        model_file = Path(model_path);
+        if (not isinstance(target_classes, list) or not target_classes) and not all_classes: raise ValueError("target_classes must be a non-empty list")
+        model_file = Path(model_path)
         if not model_file.is_file(): raise FileNotFoundError(f"Model file not found: {model_path}")
         try:
             self.model = YOLO(self.model_path); logger.info(f"YOLO model loaded successfully from {self.model_path}")
             self.class_id_to_name: Dict[int, str] = self.model.names; logger.debug(f"Model class names loaded: {self.class_id_to_name}")
         except Exception as e: logger.exception(f"Failed to load YOLO model from {self.model_path}: {e}"); raise
         self.target_class_ids: Set[int] = set(); name_to_id: Dict[str, int] = {name.lower(): id for id, name in self.class_id_to_name.items()}
-        for target in target_classes:
-            if isinstance(target, int):
-                if target in self.class_id_to_name: self.target_class_ids.add(target)
-                else: logger.warning(f"Requested class ID {target} not in model. Ignoring.")
-            elif isinstance(target, str):
-                target_lower = target.lower()
-                if target_lower in name_to_id: self.target_class_ids.add(name_to_id[target_lower])
-                else: logger.warning(f"Requested class name '{target}' not found in model. Ignoring.")
-            else: logger.warning(f"Invalid item '{target}' in target_classes list. Ignoring.")
+        if all_classes:
+            self.target_class_ids = set(self.class_id_to_name.keys()); logger.info(f"All classes selected for detection: {self.target_class_ids}")
+        else:
+            for target in target_classes:
+                if isinstance(target, int):
+                    if target in self.class_id_to_name: self.target_class_ids.add(target)
+                    else: logger.warning(f"Requested class ID {target} not in model. Ignoring.")
+                elif isinstance(target, str):
+                    target_lower = target.lower()
+                    if target_lower in name_to_id: self.target_class_ids.add(name_to_id[target_lower])
+                    else: logger.warning(f"Requested class name '{target}' not found in model. Ignoring.")
+                else: logger.warning(f"Invalid item '{target}' in target_classes list. Ignoring.")
         if not self.target_class_ids: raise ValueError("No valid target classes resolved for the loaded model.")
+
+    @property
+    def target_class_names(self) -> List[str]:
+        """Returns the list of target class names corresponding to the resolved class IDs."""
+        return [self.class_id_to_name[cls_id] for cls_id in sorted(self.target_class_ids)]
 
     def _calculate_area(self, box: np.ndarray) -> float:
         x1, y1, x2, y2 = box; width = max(0, x2 - x1); height = max(0, y2 - y1); return float(width * height)
