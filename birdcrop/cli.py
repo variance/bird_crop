@@ -4,8 +4,8 @@
 Command-line script to detect and crop objects from images using the birdcrop library.
 """
 
-SCRIPT_VERSION = "0.3.6"
-SCRIPT_DATE = "2026-10-03"
+SCRIPT_VERSION = "0.3.7"
+SCRIPT_DATE = "2026-10-04"
 
 # -------------------------------------------------------------------------- #
 
