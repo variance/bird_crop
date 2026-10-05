@@ -341,7 +341,8 @@ def main():
     logger.info(f"Confidence threshold: {args.confidence}")
     logger.info(f"Margin: {args.margin}px")
     logger.info(f"Process single best detection per image: {args.single}")
-    if not args.single or len(target_classes_input) > 1 or args.all_classes: logger.info(f"Sorting criterion: {args.sortby}")
+    if not args.single or len(target_classes_input) > 1 or args.all_classes:
+        logger.info(f"Sorting criterion: {args.sortby}")
     logger.info(f"Output template: {args.output_template}")
     logger.info(f"Force overwrite: {args.force}")
     logger.info(f"Save metadata: {args.save_metadata}") # Log new option
