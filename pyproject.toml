@@ -20,6 +20,7 @@ dependencies = [
     "pywin32; sys_platform == 'win32'",
     "ultralytics",
 ]
+keywords = [ "birds", "image-cropping", "wildlife-photography", "image-recognition", "yolo", "bird-detection", "object-detection", "exif" ]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: End Users/Desktop",
