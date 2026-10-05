@@ -2,6 +2,25 @@
 
 All notable changes to BirdCrop are documented here.
 
+## [0.1.9] - 2026-10-05
+
+### Added
+
+- Added the pseudo object class `ALL` to select all model supported object classes
+  for cropping. The combination of `--class ALL` and `--multiple` and a suitable
+  `--confidence` level is potentially useful to test a model or to compare models.
+- Added short options `-c` for `--classes` and `-l` for `--list-classes`.
+- Added bool parameter `all_classes` to the `BirdCropper` constructor (default:
+  `False`).
+- Added property `target_class_names` to the BirdCropper class.
+
+### Changed
+
+- Improved logging to report the names of the selected classes in the summmary.
+- Improved the usage message when a shortcut is invoked without drag & drop.
+    (Windows)
+- Changed example CLI invocations in the README to the new syntax.
+
 ## [0.1.8] - 2026-10-03
 
 ### Added
