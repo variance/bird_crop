@@ -17,14 +17,14 @@ Originally developed to rapidly identify and extract avian subjects from high-sp
   <table>
     <tr>
       <td align="center" width="50%">
-        <h3>Before (original folder)</h3>
+        <h3>Before (input folder)</h3>
         <img src="https://raw.githubusercontent.com/variance/bird_crop/main/docs/images/vorher.png"
      alt="image folder before auto-cropping" width="100%">
       </td>
       <td align="center" width="50%">
         <h3>After Auto-Cropping (output folder)</h3>
         <img src="https://raw.githubusercontent.com/variance/bird_crop/main/docs/images/nachher.png"
-     alt="image folder after auto-cropping" width="100%">
+     alt="output folder with automatically cropped images" width="100%">
       </td>
     </tr>
   </table>
