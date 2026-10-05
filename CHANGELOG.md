@@ -2,6 +2,13 @@
 
 All notable changes to BirdCrop are documented here.
 
+## [0.2.1] - 2026-10-05
+
+### Added
+
+- Added icon/logo to the top right of the README.
+- Added keywords to the project description.
+
 ## [0.1.9] - 2026-10-05
 
 ### Added
