@@ -298,10 +298,10 @@ def main():
     # --- Parse --classes argument ---
     if args.classes and args.classes.strip().lower() == "all":
         logger.info("Target classes set to 'ALL'. All classes in the model will be processed.")
-        target_classes_input = "ALL"
+        target_classes_input: List[str | int] = [ "ALL" ]
         args.all_classes = True
     else:
-        target_classes_input = parse_classes_arg(args.classes)
+        target_classes_input: List[str | int] = parse_classes_arg(args.classes)
         args.all_classes = False
     if not target_classes_input:
         parser.error("No target classes specified or parsed from --classes argument.")
