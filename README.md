@@ -24,7 +24,7 @@ Originally developed to rapidly identify and extract avian subjects from high-sp
 ## Key Features
 
 *   **YOLO-Powered Detection:** Uses YOLO26 models by default for faster, more accurate bird detection. Existing models in the shared cache are reused automatically; you can also provide a YOLOv8 or custom model with `--model`.
-*   **Flexible Class Targeting:** Specify which object classes to detect using their names (e.g., `"bird,dog,cat"`) or their model-specific IDs (e.g., `"14,16,15"`). The tool adapts to the classes present in the loaded model.
+*   **Flexible Class Targeting:** Specify which object classes to detect using their names (e.g., `"bird,dog,cat"`) or their model-specific IDs (e.g., `"14,16,15"`). The tool adapts to the classes present in the loaded model. There is also the option to select all object classes provided by the model.
 *   **List Model Classes:** Easily list all classes and their IDs available within a specific YOLO model file using the `--list-classes` option.
 *   **Customizable Output Paths:** Define complex output file paths and names using Python's format string syntax via `--output-template`. Access detailed information about the input file, detection, and crop (see Template Variables below).
 *   **Cropping Margin:** Add a specified pixel margin around the detected bounding box before cropping using `--margin`.
@@ -106,13 +106,13 @@ to explicitly choose another YOLO26 model:
 
 ```bash
 # default: yolo26s.pt
-python run_birdcrop.py path/to/images
+birdcrop path/to/images
 
 # use the large YOLO26 model
-python run_birdcrop.py --model-size large path/to/images
+birdcrop --model-size large path/to/images
 
 # use a specific model file, including YOLOv8 or a custom model
-python run_birdcrop.py --model path/to/model.pt path/to/images
+birdcrop --model path/to/model.pt path/to/images
 ```
 
 When using `--model-size`, a missing model file is downloaded automatically. A user-specified `--model` must already exist locally.
@@ -143,13 +143,13 @@ CLI flags:
 
 ```bash
 # enabled by default
-python run_birdcrop.py --check-updates [options] [INPUT_PATH ...]
+birdcrop --check-updates [options] [INPUT_PATH ...]
 
 # disable all online checks
-python run_birdcrop.py --no-update-check [options] [INPUT_PATH ...]
+birdcrop --no-update-check [options] [INPUT_PATH ...]
 
 # network timeout per endpoint in seconds
-python run_birdcrop.py --update-check-timeout 2.0 [options] [INPUT_PATH ...]
+birdcrop --update-check-timeout 2.0 [options] [INPUT_PATH ...]
 ```
 
 ## Upgrading
