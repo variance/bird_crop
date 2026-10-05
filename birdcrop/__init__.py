@@ -15,8 +15,8 @@ from .exceptions import (
     PredictionError,
 )
 
-__version__ = "0.1.9"
-__date__ = "2026-10-04"
+__version__ = "0.2.1"
+__date__ = "2026-10-05"
 
 __all__ = [
     'BirdCropper',
