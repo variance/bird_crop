@@ -1,4 +1,13 @@
-# BirdCrop 🐦✂️
+<table width="100%" border="0" cellpadding="0" cellspacing="0">
+  <tr>
+    <td width="85%" style="border: none;">
+      <h1>BirdCrop 🐦✂️</h1>
+    </td>
+    <td width="15%" align="right" style="border: none;">
+      <img src="https://raw.githubusercontent.com/variance/bird_crop/main/docs/images/bird-crop.jpg" alt="BirdCrop Logo" width="70" style="border-radius: 6px;">
+    </td>
+  </tr>
+</table>
 
 **BirdCrop** is a Python command-line utility and library designed to automatically detect objects (like birds, people, etc.) in images using YOLO models and save cropped images of those detections. It offers flexible configuration for targeting specific classes, adding margins, sorting detections, and customizing output filenames and locations using powerful templating.
 
