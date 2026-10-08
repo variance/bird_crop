@@ -4,8 +4,8 @@
 Command-line script to detect and crop objects from images using the birdcrop library.
 """
 
-SCRIPT_VERSION = "0.3.7"
-SCRIPT_DATE = "2026-10-04"
+SCRIPT_VERSION = "0.3.8"
+SCRIPT_DATE = "2026-10-08"
 
 # -------------------------------------------------------------------------- #
 
@@ -431,6 +431,7 @@ def main():
     total_metadata_saved = 0 # Track metadata files
     processed_files_count = 0
     futures_map: Dict[Any, Path] = {}
+    output_dirs_created: Set[Path] = set()
 
     with ThreadPoolExecutor(max_workers=args.workers, thread_name_prefix='Worker') as executor:
         for img_path in image_files_to_process:
@@ -452,7 +453,10 @@ def main():
             try:
                 # Result is now a tuple: (list_of_crop_paths, list_of_metadata_paths)
                 saved_crop_paths, saved_metadata_paths = future.result()
-                if saved_crop_paths: total_crops_saved += len(saved_crop_paths)
+                if saved_crop_paths:
+                    for path in saved_crop_paths:
+                        output_dirs_created.add(path.parent)
+                    total_crops_saved += len(saved_crop_paths)
                 if saved_metadata_paths: total_metadata_saved += len(saved_metadata_paths)
             except Exception as exc:
                 logger.error(f"An error occurred processing {img_path.name}: {exc}", exc_info=log_level <= logging.DEBUG)
@@ -482,6 +486,7 @@ def main():
         if args.preserve_exif:
             logger.info(f"  (Attempted to preserve EXIF for saved crops)") # Actual count of preserved EXIF would depend on library
     logger.info(f"  Output paths generated using template: {args.output_template}")
+    logger.info(f"  Output directories created: {', '.join(str(d) for d in sorted(output_dirs_created)) if output_dirs_created else 'None'}")
     logger.info(f"  Total time: {duration:.2f} seconds")
     logger.info("-" * 30)
 
