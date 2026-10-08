@@ -10,23 +10,27 @@ SCRIPT_DATE = "2026-10-08"
 # -------------------------------------------------------------------------- #
 
 import argparse
-import logging
-import time
-import os
-import sys
-import re
-import json
 import importlib.metadata
-from pathlib import Path
+import json
+import logging
+import os
+import re
+import sys
+import time
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Tuple, Set, Dict, Any
-from urllib.request import urlopen, Request
-from urllib.error import URLError, HTTPError
+from pathlib import Path
+from typing import Any, Dict, List, Set, Tuple
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 # Import from the library
 from ultralytics import YOLO
+
 from birdcrop import BirdCropper, find_image_files
-from birdcrop.utils import DEFAULT_MODEL_DIR, DEFAULT_MODEL_SIZE, YOLO_MODEL_SIZES, _YOLO_RELEASE_URL_PREFIX, find_best_local_model
+from birdcrop.utils import (_YOLO_RELEASE_URL_PREFIX, DEFAULT_MODEL_DIR,
+                            DEFAULT_MODEL_SIZE, YOLO_MODEL_SIZES,
+                            find_best_local_model)
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -175,6 +179,7 @@ def expand_input_lists(input_paths):
     return expanded
 
 import urllib.request
+
 
 def download_model(model_path: str, url: str):
     resolved_path = os.path.abspath(model_path)
@@ -432,6 +437,7 @@ def main():
     processed_files_count = 0
     futures_map: Dict[Any, Path] = {}
     output_dirs_created: Set[Path] = set()
+    output_dirs_counter: Counter[str] = Counter() # basename of output directories created -> count of crops saved there
 
     with ThreadPoolExecutor(max_workers=args.workers, thread_name_prefix='Worker') as executor:
         for img_path in image_files_to_process:
@@ -456,6 +462,7 @@ def main():
                 if saved_crop_paths:
                     for path in saved_crop_paths:
                         output_dirs_created.add(path.parent)
+                        output_dirs_counter[path.parent.name] += 1
                     total_crops_saved += len(saved_crop_paths)
                 if saved_metadata_paths: total_metadata_saved += len(saved_metadata_paths)
             except Exception as exc:
@@ -481,12 +488,13 @@ def main():
         logger.info(f"  (Dry run: Would have potentially saved {total_crops_saved} crop(s) and {total_metadata_saved} metadata file(s))")
     else:
         logger.info(f"  Saved {total_crops_saved} crop(s).")
+        logger.info(f"  Crops saved in each output directory: {', '.join(f'{name}: {count}' for name, count in sorted(output_dirs_counter.items()))}")
         if args.save_metadata:
             logger.info(f"  Saved {total_metadata_saved} metadata file(s).")
         if args.preserve_exif:
             logger.info(f"  (Attempted to preserve EXIF for saved crops)") # Actual count of preserved EXIF would depend on library
     logger.info(f"  Output paths generated using template: {args.output_template}")
-    logger.info(f"  Output directories created: {', '.join(str(d) for d in sorted(output_dirs_created)) if output_dirs_created else 'None'}")
+    logger.info(f"  Output directories: {len(output_dirs_created) if len(output_dirs_created) != 1 else output_dirs_created.pop()}") # created unless already existing
     logger.info(f"  Total time: {duration:.2f} seconds")
     logger.info("-" * 30)
 
