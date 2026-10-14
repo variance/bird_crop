@@ -243,7 +243,7 @@ def main():
     parser.add_argument("--multiple", "-m", dest='single', action='store_false', help="Process and save ALL detected objects per image. Default is to save only the best one.")
     parser.add_argument("--sortby", type=str, default="size", choices=["confidence", "size"], help="Criterion to sort detections ('confidence' or 'size'). Determines the 'best' object in single mode.")
     parser.add_argument("--workers", "-w", type=int, default=default_workers, help="Number of parallel worker threads for processing images.")
-    parser.add_argument("--tiling", action="store_true", help="Enable tiled inference for high-resolution images.")
+    parser.add_argument("--tiling", action="store_true", help="Enable tiled inference for tiny, distant objects. CAVEAT: Heavy CPU performance impact!")
     parser.add_argument("--overlap", type=float, default=0.25, help="Tile overlap ratio between 0.0 and 1.0. Default: 0.25.")
     parser.add_argument('--verbose', '-v', action='count', default=0, help="Increase logging verbosity (e.g., -v for DEBUG, default INFO).")
     # --- Miscellaneous Arguments ---
