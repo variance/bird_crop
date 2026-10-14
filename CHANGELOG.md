@@ -9,6 +9,8 @@ All notable changes to BirdCrop are documented here.
 - Added a lazy dual-backend architecture with LibreYOLO as the default and
   optional Ultralytics compatibility through `--backend ultralytics`.
 - Added backend-specific model defaults: `LibreYOLO9s.pt` and `yolo26s.pt`.
+- Added native tiled inference through `--tiling` and configurable tile
+  overlap through `--overlap`.
 
 ### Changed
 
@@ -19,11 +21,15 @@ All notable changes to BirdCrop are documented here.
   mechanism instead of failing in the CLI pre-check.
 - Documented backend-specific model-size options and successful sample-image
   processing with `docs/images/testimage_1.jpg`.
+- Passed tiled inference settings through the CLI, `BirdCropper`, and the
+  backend adapters.
 
 ### Fixed
 
 - Allowed `BirdCropper` initialization to continue without an already-present
   model file, leaving model resolution to the selected backend.
+- Added a clear warning and standard-inference fallback when tiled inference is
+  requested with the legacy Ultralytics backend.
 
 ## [0.2.1] - 2026-10-05
 

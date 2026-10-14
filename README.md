@@ -33,6 +33,7 @@ Originally developed to rapidly identify and extract avian subjects from high-sp
 ## Key Features
 
 *   **Multi-Backend Detection:** Uses the MIT-licensed LibreYOLO backend by default. The legacy Ultralytics backend remains available through `--backend ultralytics`.
+*   **Native Tiled Inference:** Use LibreYOLO's native slicing for high-resolution images with `--tiling` and configure the tile overlap with `--overlap`.
 *   **Flexible Class Targeting:** Specify which object classes to detect using their names (e.g., `"bird,dog,cat"`) or their model-specific IDs (e.g., `"14,16,15"`). The tool adapts to the classes present in the loaded model. There is also the option to select all object classes provided by the model.
 *   **List Model Classes:** Easily list all classes and their IDs available within a specific YOLO model file using the `--list-classes` option.
 *   **Customizable Output Paths:** Define complex output file paths and names using Python's format string syntax via `--output-template`. Access detailed information about the input file, detection, and crop (see Template Variables below).
@@ -156,6 +157,24 @@ When more than one target class is selected, the default output template
 creates category-specific crop paths so results do not overwrite one another.
 Use `--multiple` or its short form `-m` to save all detections, and
 `--save-metadata` or `-M` to save JSON metadata alongside crops.
+
+### Tiled Inference
+
+For high-resolution images where small objects would be reduced too much by a
+single full-frame prediction, enable LibreYOLO's native tiled inference:
+
+```bash
+birdcrop --tiling --overlap 0.25 path/to/high-resolution-images
+```
+
+`--overlap` is the fraction shared between neighboring tiles. It must be at
+least `0.0` and less than `1.0`; the default is `0.25`. Tile detections are
+returned in the original full-image coordinates before cropping.
+
+Native tiled inference is supported by the default LibreYOLO backend. The
+legacy Ultralytics backend does not support this API; when `--tiling` is used
+with `--backend ultralytics`, BirdCrop logs a warning and performs standard
+non-tiled inference instead.
 
 ## Usage
 

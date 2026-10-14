@@ -41,11 +41,12 @@ class BirdCropper:
     sorting, cropping with margin, flexible output path generation,
     metadata saving, and dry run simulation.
     """
-    def __init__(self, model_path: str = "LibreYOLO9s.pt", target_classes: Optional[List[Union[str, int]]] = None, process_single: bool = True, sort_by: str = "size", margin: int = 0, all_classes: bool = False, backend: str = "libreyolo"):
-        self.model_path = model_path; self.backend_name = backend; self.process_single = process_single; self.sort_by = sort_by; self.margin = margin; self.all_classes = all_classes
+    def __init__(self, model_path: str = "LibreYOLO9s.pt", target_classes: Optional[List[Union[str, int]]] = None, process_single: bool = True, sort_by: str = "size", margin: int = 0, all_classes: bool = False, backend: str = "libreyolo", tiling: bool = False, overlap_ratio: float = 0.25):
+        self.model_path = model_path; self.backend_name = backend; self.process_single = process_single; self.sort_by = sort_by; self.margin = margin; self.all_classes = all_classes; self.tiling = tiling; self.overlap_ratio = overlap_ratio
         if target_classes is None: target_classes = ['bird']
         if sort_by not in ["confidence", "size"]: raise ValueError("sort_by must be 'confidence' or 'size'")
         if margin < 0: raise ValueError("margin cannot be negative")
+        if not 0.0 <= overlap_ratio < 1.0: raise ValueError("overlap_ratio must be between 0.0 (inclusive) and 1.0 (exclusive)")
         if (not isinstance(target_classes, list) or not target_classes) and not all_classes: raise ValueError("target_classes must be a non-empty list")
         try:
             self.backend: DetectionBackend = create_backend(self.backend_name, self.model_path)
@@ -130,7 +131,7 @@ class BirdCropper:
         except Exception as e: logger.error(f"Error reading or processing image {img_path}: {e}"); return [], []
 
         # --- Prediction ---
-        try: results = self.backend.predict(img, conf)
+        try: results = self.backend.predict(img, conf, tiling=self.tiling, overlap_ratio=self.overlap_ratio)
         except Exception as e: logger.error(f"Error during YOLO prediction for {img_path}: {e}"); return [], []
 
         # --- Detection Extraction ---

@@ -243,6 +243,8 @@ def main():
     parser.add_argument("--multiple", "-m", dest='single', action='store_false', help="Process and save ALL detected objects per image. Default is to save only the best one.")
     parser.add_argument("--sortby", type=str, default="size", choices=["confidence", "size"], help="Criterion to sort detections ('confidence' or 'size'). Determines the 'best' object in single mode.")
     parser.add_argument("--workers", "-w", type=int, default=default_workers, help="Number of parallel worker threads for processing images.")
+    parser.add_argument("--tiling", action="store_true", help="Enable tiled inference for high-resolution images.")
+    parser.add_argument("--overlap", type=float, default=0.25, help="Tile overlap ratio between 0.0 and 1.0. Default: 0.25.")
     parser.add_argument('--verbose', '-v', action='count', default=0, help="Increase logging verbosity (e.g., -v for DEBUG, default INFO).")
     # --- Miscellaneous Arguments ---
     parser.add_argument(
@@ -280,6 +282,9 @@ def main():
         )
 
     args = parser.parse_args()
+
+    if not 0.0 <= args.overlap < 1.0:
+        parser.error("--overlap must be between 0.0 (inclusive) and 1.0 (exclusive).")
 
     # --- Handle --version early ---
     if getattr(args, "version", False):
@@ -361,6 +366,8 @@ def main():
     logger.info(f"Preserve EXIF: {args.preserve_exif}")
     logger.info(f"Number of workers: {args.workers}")
     logger.info(f"Backend: {args.backend}")
+    if args.tiling:
+        logger.info(f"Tiled inference enabled (overlap ratio: {args.overlap:.2f})")
 
     # --- Model selection and auto-download ---
     model_url = None
@@ -432,6 +439,7 @@ def main():
             model_path=model_path, target_classes=target_classes_input,
             process_single=args.single, sort_by=args.sortby, margin=args.margin,
             all_classes=args.all_classes, backend=args.backend,
+            tiling=args.tiling, overlap_ratio=args.overlap,
         )
         logger.info(f"Model '{model_path}' loaded. Targeting class IDs: {sorted(list(cropper.target_class_ids))}")
     except ValueError as e: logger.error(f"Configuration error: {e}"); exit(1)

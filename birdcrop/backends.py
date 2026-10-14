@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+import threading
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Protocol
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -22,7 +26,13 @@ class DetectionBackend(Protocol):
 
     class_names: Dict[int, str]
 
-    def predict(self, image: np.ndarray, confidence: float) -> Iterable[Detection]:
+    def predict(
+        self,
+        image: np.ndarray,
+        confidence: float,
+        tiling: bool = False,
+        overlap_ratio: float = 0.25,
+    ) -> Iterable[Detection]:
         """Run detection and return boxes in original image coordinates."""
 
 
@@ -65,6 +75,9 @@ def _extract_detections(results: Any) -> Iterable[Detection]:
 class UltralyticsBackend:
     """Adapter for the optional legacy Ultralytics backend."""
 
+    _tiling_lock = threading.Lock()
+    _tiling_warning_emitted = False
+
     def __init__(self, model_path: str):
         from ultralytics import YOLO
 
@@ -72,7 +85,22 @@ class UltralyticsBackend:
         self.class_names = _normalize_class_names(self.model.names)
         self._is_yolo26 = "yolo26" in model_path.lower()
 
-    def predict(self, image: np.ndarray, confidence: float) -> Iterable[Detection]:
+    def predict(
+        self,
+        image: np.ndarray,
+        confidence: float,
+        tiling: bool = False,
+        overlap_ratio: float = 0.25,
+    ) -> Iterable[Detection]:
+        if tiling and not UltralyticsBackend._tiling_warning_emitted:
+            # Ensure that only one thread emits the warning about tiling not being supported by the Ultralytics backend.
+            with UltralyticsBackend._tiling_lock:
+                if not UltralyticsBackend._tiling_warning_emitted:
+                    logger.warning(
+                        "The Ultralytics backend does not support native tiled inference; "
+                        "falling back to standard prediction."
+                    )
+                UltralyticsBackend._tiling_warning_emitted = True
         results = self.model.predict(
             source=image,
             conf=confidence,
@@ -91,8 +119,19 @@ class LibreYOLOBackend:
         self.model = LibreYOLO(model_path)
         self.class_names = _normalize_class_names(self.model.names)
 
-    def predict(self, image: np.ndarray, confidence: float) -> Iterable[Detection]:
-        results = self.model.predict(source=image, conf=confidence)
+    def predict(
+        self,
+        image: np.ndarray,
+        confidence: float,
+        tiling: bool = False,
+        overlap_ratio: float = 0.25,
+    ) -> Iterable[Detection]:
+        results = self.model.predict(
+            source=image,
+            conf=confidence,
+            tiling=tiling,
+            overlap_ratio=overlap_ratio,
+        )
         return _extract_detections(results)
 
 
