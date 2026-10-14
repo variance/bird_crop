@@ -4,8 +4,8 @@
 Command-line script to detect and crop objects from images using the birdcrop library.
 """
 
-SCRIPT_VERSION = "0.3.8"
-SCRIPT_DATE = "2026-10-08"
+SCRIPT_VERSION = "0.3.9"
+SCRIPT_DATE = "2026-10-14"
 
 # -------------------------------------------------------------------------- #
 
@@ -25,12 +25,16 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 # Import from the library
-from ultralytics import YOLO
-
 from birdcrop import BirdCropper, find_image_files
-from birdcrop.utils import (_YOLO_RELEASE_URL_PREFIX, DEFAULT_MODEL_DIR,
-                            DEFAULT_MODEL_SIZE, YOLO_MODEL_SIZES,
-                            find_best_local_model)
+from birdcrop.backends import list_model_classes as get_model_classes
+from birdcrop.utils import (
+    _YOLO_RELEASE_URL_PREFIX,
+    DEFAULT_BACKEND,
+    DEFAULT_MODEL_DIR,
+    DEFAULT_MODEL_SIZE,
+    MODEL_SIZES_BY_BACKEND,
+    find_best_local_model,
+)
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -143,16 +147,13 @@ def parse_classes_arg(classes_str: str) -> List[str | int]:
         else: items.append(item)
     return items
 
-def list_model_classes(model_path: str):
+def list_model_classes(backend: str, model_path: str):
     logger.info(f"Loading model '{model_path}' to list classes...")
     try:
-        model = YOLO(model_path)
-        if not hasattr(model, 'names') or not isinstance(model.names, dict):
-            logger.error(f"Model '{model_path}' loaded, but class names (model.names) are missing or not in the expected dictionary format.")
-            sys.exit(1)
+        class_names = get_model_classes(backend, model_path)
         print(f"\nClasses available in model '{model_path}':")
         print("-" * 40)
-        for class_id, class_name in sorted(model.names.items()):
+        for class_id, class_name in sorted(class_names.items()):
             print(f"  ID: {class_id:<5} Name: {class_name}")
         print("-" * 40)
         sys.exit(0)
@@ -160,7 +161,7 @@ def list_model_classes(model_path: str):
         logger.error(f"Model file not found: {model_path}")
         sys.exit(1)
     except Exception as e:
-        logger.error(f"Failed to load model '{model_path}' or access class names: {e}", exc_info=True)
+        logger.error(f"Failed to load {backend} model '{model_path}' or access class names: {e}", exc_info=True)
         sys.exit(1)
 
 def expand_input_lists(input_paths):
@@ -224,8 +225,14 @@ def main():
     # --- Model & Detection Arguments ---
     parser.add_argument("--model", type=str, default=None, help="Path to the YOLO model file (yolo???.pt)."
                         f" If not specified, the --model-size and the default model directory '{DEFAULT_MODEL_DIR}' will be used.")
-    parser.add_argument("--model-size", type=str, choices=YOLO_MODEL_SIZES.keys(), default=None,
-                        help=f"YOLO model size to use if --model is not specified. Defaults to '{DEFAULT_MODEL_SIZE}' if no local model is found.")
+    parser.add_argument("--backend", choices=MODEL_SIZES_BY_BACKEND.keys(), default=DEFAULT_BACKEND,
+                        help="Detection backend. LibreYOLO is the MIT-licensed default; Ultralytics is retained for compatibility.")
+    # --- Model Size Argument (Dynamic Choices) ---
+    all_sizes = set()
+    for sizes in MODEL_SIZES_BY_BACKEND.values():
+        all_sizes.update(sizes.keys())
+    parser.add_argument("--model-size", type=str, choices=list(all_sizes), default=None, 
+                        help=f"Model size to use if --model is not specified. Defaults to '{DEFAULT_MODEL_SIZE}' if no local model is found.")
     parser.add_argument("--confidence", '-C', type=float, default=0.5, help="Confidence threshold for detection (0.0 to 1.0). Default: 0.5.")
     # --- Class Specification ---
     parser.add_argument("--classes", '-c', type=str, default="bird", help='Comma-separated list of class names (e.g., "person,car,cat,dog") or class IDs (e.g., "0,2,15,16") to detect.'
@@ -285,7 +292,7 @@ def main():
     if args.list_classes:
         if not args.model:
             parser.error("--list-classes requires --model to be specified (path to a 'yolo<VERSION>.pt' file).")
-        list_model_classes(args.model)
+        list_model_classes(args.backend, args.model)
 
     # --- Adjust Log Level ---
     log_level = logging.INFO
@@ -353,59 +360,66 @@ def main():
     logger.info(f"Save metadata: {args.save_metadata}") # Log new option
     logger.info(f"Preserve EXIF: {args.preserve_exif}")
     logger.info(f"Number of workers: {args.workers}")
+    logger.info(f"Backend: {args.backend}")
 
     # --- Model selection and auto-download ---
     model_url = None
+    model_sizes = MODEL_SIZES_BY_BACKEND[args.backend]
+    configured_assets_tag = _YOLO_RELEASE_URL_PREFIX.rstrip('/').split('/')[-1]
 
     if args.model:
         # Fall 1: Benutzer hat explizit einen Pfad mit --model angegeben
         model_path = args.model
         logger.info(f"Using user-specified model: {model_path}")
-        configured_assets_tag = _YOLO_RELEASE_URL_PREFIX.rstrip('/').split('/')[-1]
         selected_model_filename = Path(model_path).name
 
     elif args.model_size:
         # Fall 2: Benutzer hat explizit eine Modellgröße via --model-size gewählt
-        model_filename, model_url = YOLO_MODEL_SIZES[args.model_size]
+        model_filename, model_url = model_sizes[args.model_size]
         model_path = str(DEFAULT_MODEL_DIR / model_filename)
         logger.info(f"Using explicitly requested --model-size '{args.model_size}': {model_path}")
-        configured_assets_tag = _YOLO_RELEASE_URL_PREFIX.rstrip('/').split('/')[-1]
         selected_model_filename = model_filename
 
     else:
         # Fall 3: Weder --model noch --model-size wurden angegeben -> Erst lokal suchen
-        found_local = find_best_local_model(DEFAULT_MODEL_DIR)
+        found_local = find_best_local_model(DEFAULT_MODEL_DIR, backend=args.backend)
         
         if found_local:
             model_filename, found_size = found_local
             model_path = str(DEFAULT_MODEL_DIR / model_filename)
             logger.info(f"No model specified. Found existing local model '{model_filename}' (size: {found_size}) in {DEFAULT_MODEL_DIR}")
-            configured_assets_tag = _YOLO_RELEASE_URL_PREFIX.rstrip('/').split('/')[-1]
             selected_model_filename = model_filename
         else:
             # Fallback: Kein lokales Modell vorhanden -> Default-Modell (small) festlegen
-            model_filename, model_url = YOLO_MODEL_SIZES[DEFAULT_MODEL_SIZE]
+            model_filename, model_url = model_sizes[DEFAULT_MODEL_SIZE]
             model_path = str(DEFAULT_MODEL_DIR / model_filename)
             logger.info(f"No local model found in {DEFAULT_MODEL_DIR}. Defaulting to --model-size '{DEFAULT_MODEL_SIZE}': {model_path}")
-            configured_assets_tag = _YOLO_RELEASE_URL_PREFIX.rstrip('/').split('/')[-1]
             selected_model_filename = model_filename
 
     if args.check_updates:
         if args.update_check_timeout <= 0:
             logger.warning("Skipping update check due to non-positive --update-check-timeout=%s", args.update_check_timeout)
         else:
-            logger.info("Checking for updates (timeout %.1fs per endpoint)...", args.update_check_timeout)
-            check_ultralytics_update(timeout=args.update_check_timeout)
-            check_model_release_update(
-                current_assets_tag=configured_assets_tag,
-                model_filename=selected_model_filename,
-                timeout=args.update_check_timeout,
-            )
+            if args.backend == "ultralytics":
+                logger.info("Checking for updates (timeout %.1fs per endpoint)...", args.update_check_timeout)
+                check_ultralytics_update(timeout=args.update_check_timeout)
+                check_model_release_update(
+                    current_assets_tag=configured_assets_tag,
+                    model_filename=selected_model_filename,
+                    timeout=args.update_check_timeout,
+                )
+            else:
+                logger.info("Skipping Ultralytics update checks for the LibreYOLO backend.")
     else:
         logger.info("Update checks are disabled (--no-update-check).")
 
     if not os.path.isfile(model_path):
-        if model_url:
+        if args.backend == "libreyolo":
+            logger.info(
+                "Model file '%s' not found. LibreYOLO will attempt its native model download.",
+                model_path,
+            )
+        elif model_url:
             download_model(model_path, model_url)
         else:
             logger.error(f"Model file '{model_path}' not found and no auto-download URL is known for this file.")
@@ -416,7 +430,8 @@ def main():
         logger.info("Loading detection model...")
         cropper = BirdCropper(
             model_path=model_path, target_classes=target_classes_input,
-            process_single=args.single, sort_by=args.sortby, margin=args.margin, all_classes=args.all_classes
+            process_single=args.single, sort_by=args.sortby, margin=args.margin,
+            all_classes=args.all_classes, backend=args.backend,
         )
         logger.info(f"Model '{model_path}' loaded. Targeting class IDs: {sorted(list(cropper.target_class_ids))}")
     except ValueError as e: logger.error(f"Configuration error: {e}"); exit(1)

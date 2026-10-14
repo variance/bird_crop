@@ -14,8 +14,21 @@ YOLO_MODEL_SIZES = {
     "xlarge": ("yolo26x.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26x.pt"),
 }
 
+LIBREYOLO_MODEL_SIZES = {
+    "tiny": ("LibreYOLO9t.pt", None),
+    "small": ("LibreYOLO9s.pt", None),
+    "medium": ("LibreYOLO9m.pt", None),
+    "compact": ("LibreYOLO9c.pt", None),
+}
+
+MODEL_SIZES_BY_BACKEND = {
+    "libreyolo": LIBREYOLO_MODEL_SIZES,
+    "ultralytics": YOLO_MODEL_SIZES,
+}
+DEFAULT_BACKEND = "libreyolo"
+# XXX this is a bit of a hack: we define the default model size here, but the actual model filename and URL are determined by the backend and the model size.
+# The CLI will use this default if no --model-size is specified and no local model is found.
 DEFAULT_MODEL_SIZE = "small"  # we do not force larger models by default; small is a good balance of speed and accuracy 
-DEFAULT_MODEL_FILENAME, DEFAULT_MODEL_URL = YOLO_MODEL_SIZES[DEFAULT_MODEL_SIZE]
 
 import sys
 import cv2
@@ -34,20 +47,27 @@ SUPPORTED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff'} # Keep
 DEFAULT_MODEL_DIR = Path(user_cache_dir("birdcrop","variance")) / "models" # use my github username as the author name
 
 
-def find_best_local_model(model_dir: Path = DEFAULT_MODEL_DIR) -> Tuple[str, str] | None:
+def find_best_local_model(model_dir: Path = DEFAULT_MODEL_DIR, backend: str = DEFAULT_BACKEND) -> Tuple[str, str] | None:
     """
     Sucht im angegebenen Ordner nach dem besten vorhandenen YOLO-Modell.
     Bevorzugt größere/genauere Modelle, falls mehrere existieren.
     Rückgabe: Tuple (model_filename, model_size_key) oder None.
+    CAVEAT: Die größten Modelle sind nicht immer die besten für alle Szenarien. User sollten die Leistung
+    (Anzahl der erkannten Objekte, Genauigkeit, Rechenzeit) mit eigenen Testbildern validieren!
     """
+    if backend not in MODEL_SIZES_BY_BACKEND:
+        raise ValueError(f"Unsupported backend: {backend}")
     if not model_dir.is_dir():
         return None
+    model_sizes = MODEL_SIZES_BY_BACKEND[backend]
 
     # Präferenzreihenfolge für die automatische Erkennung vorhandener Modelle
-    preference_order = ["xlarge", "large", "medium", "small", "nano"]
+    preference_order = ["xlarge", "large", "compact","medium", "small", "nano", "tiny"]
     
     for size in preference_order:
-        filename, _ = YOLO_MODEL_SIZES[size]
+        if size not in model_sizes:
+            continue
+        filename, _ = model_sizes[size]
         if (model_dir / filename).is_file():
             return filename, size
             

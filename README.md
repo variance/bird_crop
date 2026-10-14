@@ -32,7 +32,7 @@ Originally developed to rapidly identify and extract avian subjects from high-sp
 
 ## Key Features
 
-*   **YOLO-Powered Detection:** Uses YOLO26 models by default for faster, more accurate bird detection. Existing models in the shared cache are reused automatically; you can also provide a YOLOv8 or custom model with `--model`.
+*   **Multi-Backend Detection:** Uses the MIT-licensed LibreYOLO backend by default. The legacy Ultralytics backend remains available through `--backend ultralytics`.
 *   **Flexible Class Targeting:** Specify which object classes to detect using their names (e.g., `"bird,dog,cat"`) or their model-specific IDs (e.g., `"14,16,15"`). The tool adapts to the classes present in the loaded model. There is also the option to select all object classes provided by the model.
 *   **List Model Classes:** Easily list all classes and their IDs available within a specific YOLO model file using the `--list-classes` option.
 *   **Customizable Output Paths:** Define complex output file paths and names using Python's format string syntax via `--output-template`. Access detailed information about the input file, detection, and crop (see Template Variables below).
@@ -95,12 +95,23 @@ python -m pip uninstall bird-crop
 If the shortcut was changed to point somewhere else, the cleanup command keeps
 it and reports the reason.
 
-BirdCrop uses the small model size (`yolo26s.pt`) by default. If the selected model is not present in
-the platform-specific BirdCrop user cache directory, the CLI downloads it
-automatically from the Ultralytics assets release. Once downloaded, the model
-is reused by subsequent CLI runs. You can select another YOLO26 model size with `--model-size` (`nano`, `small`, `medium`,
-`large`, or `xlarge`), or specify the path of an existing YOLOv8/custom model with
-`--model`.
+BirdCrop uses the small LibreYOLO model (`LibreYOLO9s.pt`) by default. Models
+are searched in the platform-specific BirdCrop user cache directory and reused
+by subsequent CLI runs. Select the legacy Ultralytics backend explicitly with
+`--backend ultralytics`; its default model is `yolo26s.pt` and its missing
+models can be downloaded automatically from the Ultralytics assets release.
+You can select another model size with `--model-size` (`nano`, `small`,
+`medium`, `large`, or `xlarge`) when using Ultralytics, or (`tiny`, `small`,
+`medium`, or `compact`) when using LibreYOLO. You can also specify a model
+filename with `--model`.
+
+The default LibreYOLO backend and its model distribution are MIT licensed.
+Ultralytics is an optional legacy backend and is subject to its AGPL-3.0
+license. Install it when needed with:
+
+```bash
+python -m pip install bird-crop[ultralytics]
+```
 
 The default model cache directory is provided by `platformdirs` and depends on
 the operating system. The `birdcrop-upgrade` command uses the same directory
@@ -108,23 +119,38 @@ by default. Use `--output-dir` to download models to a different location.
 
 ### Model Selection
 
-The default model is `yolo26s.pt`. If no model option is supplied, BirdCrop
+The default backend is `libreyolo`. If no model option is supplied, BirdCrop
 first reuses the best matching model already in the cache (preferring larger
-models), then downloads `yolo26s.pt` if the cache is empty. Use `--model-size`
-to explicitly choose another YOLO26 model:
+models), then uses `LibreYOLO9s.pt` if the cache is empty. Use
+`--backend ultralytics` for the legacy backend:
 
 ```bash
-# default: yolo26s.pt
+# default: LibreYOLO9s.pt through LibreYOLO
 birdcrop path/to/images
 
-# use the large YOLO26 model
-birdcrop --model-size large path/to/images
+# use the compact LibreYOLO9 model
+birdcrop --model-size compact path/to/images
+
+# use the legacy Ultralytics backend
+birdcrop --backend ultralytics --model-size large path/to/images
 
 # use a specific model file, including YOLOv8 or a custom model
 birdcrop --model path/to/model.pt path/to/images
 ```
 
-When using `--model-size`, a missing model file is downloaded automatically. A user-specified `--model` must already exist locally.
+When using `--model-size`, a missing model file is downloaded automatically by
+the selected backend. LibreYOLO resolves and downloads its supported model
+files from its native model registry. A user-specified `--model` is also passed
+to the selected backend, so LibreYOLO can download a recognized missing
+filename; unsupported or local custom model paths must already exist.
+
+The `BirdCropper` library constructor does not require a model file to be
+present before backend initialization. The selected backend is responsible for
+loading an existing file or resolving a supported missing model through its
+native loading mechanism.
+
+The default backend was tested successfully with the sample image
+`docs/images/testimage_1.jpg`.
 
 When more than one target class is selected, the default output template
 creates category-specific crop paths so results do not overwrite one another.

@@ -2,6 +2,29 @@
 
 All notable changes to BirdCrop are documented here.
 
+## [Unreleased]
+
+### Added
+
+- Added a lazy dual-backend architecture with LibreYOLO as the default and
+  optional Ultralytics compatibility through `--backend ultralytics`.
+- Added backend-specific model defaults: `LibreYOLO9s.pt` and `yolo26s.pt`.
+
+### Changed
+
+- Changed the default detector dependency from Ultralytics to LibreYOLO.
+- Kept Ultralytics as an optional dependency so it is imported only when the
+  legacy backend is selected.
+- Let missing LibreYOLO model files use LibreYOLO's native weight download
+  mechanism instead of failing in the CLI pre-check.
+- Documented backend-specific model-size options and successful sample-image
+  processing with `docs/images/testimage_1.jpg`.
+
+### Fixed
+
+- Allowed `BirdCropper` initialization to continue without an already-present
+  model file, leaving model resolution to the selected backend.
+
 ## [0.2.1] - 2026-10-05
 
 ### Added

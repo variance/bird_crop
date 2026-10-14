@@ -3,7 +3,6 @@
 
 import cv2
 import numpy as np
-from ultralytics import YOLO
 from pathlib import Path
 import logging
 import os
@@ -13,25 +12,26 @@ from typing import List, Dict, Any, Optional, Set, Union, Tuple # Added Tuple
 from collections import defaultdict
 
 # Import utility functions
+from .backends import DetectionBackend, create_backend
 from .utils import load_and_orient_image, generate_output_path, get_exif_data
 
 logger = logging.getLogger(__name__)
 
 # Helper to convert NumPy types for JSON serialization
 class NpEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, np.integer):
-            return int(obj)
-        if isinstance(obj, np.floating):
-            return float(obj)
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        if isinstance(obj, Path): # Handle Path objects
-            return str(obj)
-        if isinstance(obj, os.stat_result): # Handle stat results
+    def default(self, o: Any):
+        if isinstance(o, np.integer):
+            return int(o)
+        if isinstance(o, np.floating):
+            return float(o)
+        if isinstance(o, np.ndarray):
+            return o.tolist()
+        if isinstance(o, Path): # Handle Path objects
+            return str(o)
+        if isinstance(o, os.stat_result): # Handle stat results
              # Convert stat_result to a dictionary
-             return {attr: getattr(obj, attr) for attr in dir(obj) if attr.startswith('st_')}
-        return super(NpEncoder, self).default(obj)
+             return {attr: getattr(o, attr) for attr in dir(o) if attr.startswith('st_')}
+        return super(NpEncoder, self).default(o)
 
 
 class BirdCropper:
@@ -41,18 +41,17 @@ class BirdCropper:
     sorting, cropping with margin, flexible output path generation,
     metadata saving, and dry run simulation.
     """
-    def __init__(self, model_path: str = "yolo26s.pt", target_classes: List[Union[str, int]] = None, process_single: bool = True, sort_by: str = "size", margin: int = 0, all_classes: bool = False):
-        self.model_path = model_path; self.process_single = process_single; self.sort_by = sort_by; self.margin = margin; self.all_classes = all_classes
-        self.is_yolo26 = "yolo26" in str(model_path).lower() # yolo26 can benefit from nms=False
+    def __init__(self, model_path: str = "LibreYOLO9s.pt", target_classes: Optional[List[Union[str, int]]] = None, process_single: bool = True, sort_by: str = "size", margin: int = 0, all_classes: bool = False, backend: str = "libreyolo"):
+        self.model_path = model_path; self.backend_name = backend; self.process_single = process_single; self.sort_by = sort_by; self.margin = margin; self.all_classes = all_classes
         if target_classes is None: target_classes = ['bird']
         if sort_by not in ["confidence", "size"]: raise ValueError("sort_by must be 'confidence' or 'size'")
         if margin < 0: raise ValueError("margin cannot be negative")
         if (not isinstance(target_classes, list) or not target_classes) and not all_classes: raise ValueError("target_classes must be a non-empty list")
-        model_file = Path(model_path)
-        if not model_file.is_file(): raise FileNotFoundError(f"Model file not found: {model_path}")
         try:
-            self.model = YOLO(self.model_path); logger.info(f"YOLO model loaded successfully from {self.model_path}")
-            self.class_id_to_name: Dict[int, str] = self.model.names; logger.debug(f"Model class names loaded: {self.class_id_to_name}")
+            self.backend: DetectionBackend = create_backend(self.backend_name, self.model_path)
+            self.class_id_to_name = self.backend.class_names
+            logger.info(f"{self.backend_name} model loaded successfully from {self.model_path}")
+            logger.debug(f"Model class names loaded: {self.class_id_to_name}")
         except Exception as e: logger.exception(f"Failed to load YOLO model from {self.model_path}: {e}"); raise
         self.target_class_ids: Set[int] = set(); name_to_id: Dict[str, int] = {name.lower(): id for id, name in self.class_id_to_name.items()}
         if all_classes:
@@ -131,17 +130,14 @@ class BirdCropper:
         except Exception as e: logger.error(f"Error reading or processing image {img_path}: {e}"); return [], []
 
         # --- Prediction ---
-        try: results = self.model.predict(source=img, conf=conf, verbose=False, nms=False if self.is_yolo26 else True)
+        try: results = self.backend.predict(img, conf)
         except Exception as e: logger.error(f"Error during YOLO prediction for {img_path}: {e}"); return [], []
 
         # --- Detection Extraction ---
         all_detections = []
-        for r in results:
-            boxes = r.boxes.xyxy.cpu().numpy(); classes = r.boxes.cls.cpu().numpy(); confidences = r.boxes.conf.cpu().numpy()
-            for box, cls, conf_score in zip(boxes, classes, confidences):
-                detected_cls_id = int(cls)
-                if detected_cls_id in self.target_class_ids:
-                    all_detections.append({'box': box, 'cls': detected_cls_id, 'conf': float(conf_score), 'size': self._calculate_area(box)})
+        for detection in results:
+            if detection.class_id in self.target_class_ids:
+                all_detections.append({'box': detection.box, 'cls': detection.class_id, 'conf': detection.confidence, 'size': self._calculate_area(detection.box)})
         if not all_detections: logger.info(f"No target objects detected in {img_path.name} with confidence >= {conf}."); return [], []
 
         # --- Sorting & Assign Per-Category Counter (pcnr) ---

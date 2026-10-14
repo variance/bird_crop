@@ -18,9 +18,9 @@ dependencies = [
     "Pillow",
     "platformdirs",
     "pywin32; sys_platform == 'win32'",
-    "ultralytics",
+    "libreyolo>=1.6.0",
 ]
-keywords = [ "birds", "image-cropping", "wildlife-photography", "image-recognition", "yolo", "bird-detection", "object-detection", "exif" ]
+keywords = [ "birds", "image-cropping", "wildlife-photography", "image-recognition", "yolo", "libreyolo", "bird-detection", "object-detection", "exif" ]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: End Users/Desktop",
@@ -32,6 +32,11 @@ classifiers = [
 ]
 license = "MIT"
 license-files = ["LICENSE*"]
+
+[project.optional-dependencies]
+ultralytics = ["ultralytics"]
+# RF-DETR is a heavy weight transformer model and not included in the default install.
+rfdetr = ["libreyolo[rfdetr]"]
 
 [project.urls]
 Homepage = "https://github.com/variance/bird_crop"
