@@ -53,7 +53,15 @@ class BirdCropper:
             self.class_id_to_name = self.backend.class_names
             logger.info(f"{self.backend_name} model loaded successfully from {self.model_path}")
             logger.debug(f"Model class names loaded: {self.class_id_to_name}")
-        except Exception as e: logger.exception(f"Failed to load YOLO model from {self.model_path}: {e}"); raise
+        except ImportError as e:
+            logger.error(f"Failed to import backend '{self.backend_name}': {e}. Ensure the required packages are installed.")
+            raise e from None
+        except FileNotFoundError as e:
+            logger.error(f"Model file not found at {self.model_path}: {e}. Please check the path or download the model.")
+            raise e from None
+        except Exception as e:
+            logger.exception(f"Failed to load YOLO model from {self.model_path}: {e}")
+            raise
         self.target_class_ids: Set[int] = set(); name_to_id: Dict[str, int] = {name.lower(): id for id, name in self.class_id_to_name.items()}
         if all_classes:
             self.target_class_ids = set(self.class_id_to_name.keys()); logger.info(f"All classes selected for detection: {self.target_class_ids}")
