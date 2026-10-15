@@ -5,36 +5,29 @@ Command-line script to detect and crop objects from images using the birdcrop li
 """
 
 SCRIPT_VERSION = "0.3.9"
-SCRIPT_DATE = "2026-10-14"
+SCRIPT_DATE = "2026-10-15"
 
 # -------------------------------------------------------------------------- #
 
 import argparse
-import importlib.metadata
-import json
 import logging
 import os
-import re
 import sys
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, List, Set, Tuple
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from typing import Any, Dict, List, Set
 
 # Import from the library
 from birdcrop import BirdCropper, find_image_files
+from birdcrop.backends import (_YOLO_RELEASE_URL_PREFIX, DEFAULT_BACKEND,
+                               MODELS_INFO_BY_BACKEND)
 from birdcrop.backends import list_model_classes as get_model_classes
-from birdcrop.utils import (
-    _YOLO_RELEASE_URL_PREFIX,
-    DEFAULT_BACKEND,
-    DEFAULT_MODEL_DIR,
-    DEFAULT_MODEL_SIZE,
-    MODEL_SIZES_BY_BACKEND,
-    find_best_local_model,
-)
+
+from .backends import (DEFAULT_MODEL_DIR,
+                       check_ultralytics_model_release_update,
+                       check_ultralytics_update, find_best_local_model)
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -44,97 +37,6 @@ logging.basicConfig(
 )
 # logging.getLogger("ultralytics").setLevel(logging.WARNING)
 logger = logging.getLogger("birdcrop")
-
-
-def _parse_version_parts(value: str) -> Tuple[int, ...]:
-    """Extract numeric version parts from strings like '8.3.10' or '8.3.10rc1'."""
-    parts = re.findall(r"\d+", value)
-    if not parts:
-        return (0,)
-    return tuple(int(p) for p in parts[:4])
-
-
-def _fetch_json(url: str, timeout: float = 2.0) -> Dict[str, Any] | None:
-    """Fetch JSON from URL with a short timeout; return None on network/API errors."""
-    req = Request(url, headers={"User-Agent": "birdcrop-update-check/1.0"})
-    try:
-        with urlopen(req, timeout=timeout) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except (URLError, HTTPError, TimeoutError, json.JSONDecodeError):
-        return None
-
-
-def check_ultralytics_update(timeout: float = 2.0):
-    """Check PyPI for newer ultralytics package versions."""
-    try:
-        local_version = importlib.metadata.version("ultralytics")
-    except importlib.metadata.PackageNotFoundError:
-        logger.debug("Update check: ultralytics package not found in environment.")
-        return
-    except Exception as exc:
-        logger.debug(f"Update check: could not read local ultralytics version: {exc}")
-        return
-
-    payload = _fetch_json("https://pypi.org/pypi/ultralytics/json", timeout=timeout)
-    if not payload:
-        logger.debug("Update check: could not query PyPI for ultralytics.")
-        return
-
-    latest_version = str(payload.get("info", {}).get("version", "")).strip()
-    if not latest_version:
-        logger.debug("Update check: PyPI response did not contain ultralytics version.")
-        return
-
-    if _parse_version_parts(latest_version) > _parse_version_parts(local_version):
-        logger.warning(
-            "ultralytics update available: local=%s latest=%s (PyPI)",
-            local_version,
-            latest_version,
-        )
-    else:
-        logger.info("ultralytics is up to date (local=%s, latest=%s).", local_version, latest_version)
-
-
-def check_model_release_update(current_assets_tag: str, model_filename: str | None = None, timeout: float = 2.0):
-    """Check GitHub releases for newer ultralytics/assets model tags."""
-    payload = _fetch_json("https://api.github.com/repos/ultralytics/assets/releases/latest", timeout=timeout)
-    if not payload:
-        logger.debug("Update check: could not query GitHub latest ultralytics/assets release.")
-        return
-
-    latest_tag = str(payload.get("tag_name", "")).strip()
-    if not latest_tag:
-        logger.debug("Update check: GitHub response did not include tag_name.")
-        return
-
-    if _parse_version_parts(latest_tag) <= _parse_version_parts(current_assets_tag):
-        logger.info("Model assets tag is up to date (configured=%s, latest=%s).", current_assets_tag, latest_tag)
-        return
-
-    assets = payload.get("assets") or []
-    if model_filename:
-        has_matching_asset = any(a.get("name") == model_filename for a in assets)
-        if has_matching_asset:
-            logger.warning(
-                "Newer model release available for %s: configured tag=%s, latest tag=%s.",
-                model_filename,
-                current_assets_tag,
-                latest_tag,
-            )
-        else:
-            logger.warning(
-                "Newer ultralytics/assets release detected (configured tag=%s, latest tag=%s), "
-                "but '%s' is not listed in latest assets.",
-                current_assets_tag,
-                latest_tag,
-                model_filename,
-            )
-    else:
-        logger.warning(
-            "Newer ultralytics/assets release detected: configured tag=%s, latest tag=%s.",
-            current_assets_tag,
-            latest_tag,
-        )
 
 
 def parse_classes_arg(classes_str: str) -> List[str | int]:
@@ -225,14 +127,15 @@ def main():
     # --- Model & Detection Arguments ---
     parser.add_argument("--model", type=str, default=None, help="Path to the YOLO model file (yolo???.pt)."
                         f" If not specified, the --model-size and the default model directory '{DEFAULT_MODEL_DIR}' will be used.")
-    parser.add_argument("--backend", choices=MODEL_SIZES_BY_BACKEND.keys(), default=DEFAULT_BACKEND,
+    parser.add_argument("--backend", choices=MODELS_INFO_BY_BACKEND.keys(), default=DEFAULT_BACKEND,
                         help="Detection backend. LibreYOLO is the MIT-licensed default; Ultralytics is retained for compatibility.")
     # --- Model Size Argument (Dynamic Choices) ---
     all_sizes = set()
-    for sizes in MODEL_SIZES_BY_BACKEND.values():
-        all_sizes.update(sizes.keys())
+    for models_info in MODELS_INFO_BY_BACKEND.values():
+        all_sizes.update(models_info.model_sizes.keys())
     parser.add_argument("--model-size", type=str, choices=list(all_sizes), default=None, 
-                        help=f"Model size to use if --model is not specified. Defaults to '{DEFAULT_MODEL_SIZE}' if no local model is found.")
+                        help=f"Model size to use if --model is not specified."
+                        f" Defaults to '{MODELS_INFO_BY_BACKEND[DEFAULT_BACKEND].default_model_size}' if no local model is found.")
     parser.add_argument("--confidence", '-C', type=float, default=0.5, help="Confidence threshold for detection (0.0 to 1.0). Default: 0.5.")
     # --- Class Specification ---
     parser.add_argument("--classes", '-c', type=str, default="bird", help='Comma-separated list of class names (e.g., "person,car,cat,dog") or class IDs (e.g., "0,2,15,16") to detect.'
@@ -371,7 +274,7 @@ def main():
 
     # --- Model selection and auto-download ---
     model_url = None
-    model_sizes = MODEL_SIZES_BY_BACKEND[args.backend]
+    model_sizes = MODELS_INFO_BY_BACKEND[args.backend].model_sizes
     configured_assets_tag = _YOLO_RELEASE_URL_PREFIX.rstrip('/').split('/')[-1]
 
     if args.model:
@@ -397,10 +300,10 @@ def main():
             logger.info(f"No model specified. Found existing local model '{model_filename}' (size: {found_size}) in {DEFAULT_MODEL_DIR}")
             selected_model_filename = model_filename
         else:
-            # Fallback: Kein lokales Modell vorhanden -> Default-Modell (small) festlegen
-            model_filename, model_url = model_sizes[DEFAULT_MODEL_SIZE]
+            # Fallback: Kein lokales Modell vorhanden -> Default-Modell festlegen
+            model_filename, model_url = model_sizes[MODELS_INFO_BY_BACKEND[args.backend].default_model_size]
             model_path = str(DEFAULT_MODEL_DIR / model_filename)
-            logger.info(f"No local model found in {DEFAULT_MODEL_DIR}. Defaulting to --model-size '{DEFAULT_MODEL_SIZE}': {model_path}")
+            logger.info(f"No local model found in {DEFAULT_MODEL_DIR}. Defaulting to --model-size '{MODELS_INFO_BY_BACKEND[args.backend].default_model_size}': {model_path}")
             selected_model_filename = model_filename
 
     if args.check_updates:
@@ -410,7 +313,7 @@ def main():
             if args.backend == "ultralytics":
                 logger.info("Checking for updates (timeout %.1fs per endpoint)...", args.update_check_timeout)
                 check_ultralytics_update(timeout=args.update_check_timeout)
-                check_model_release_update(
+                check_ultralytics_model_release_update(
                     current_assets_tag=configured_assets_tag,
                     model_filename=selected_model_filename,
                     timeout=args.update_check_timeout,

@@ -1,35 +1,6 @@
 # birdcrop/utils.py
 """Utility functions for the birdcrop library."""
 
-# CAVEAT: The following URL may need to be updated for future releases of ultralytics/assets!
-# The companion birdcrop-upgrade command can check for newer releases and download them.
-_YOLO_RELEASE_URL_PREFIX = "https://github.com/ultralytics/assets/releases/download/v8.4.0/"
-
-# Model size mapping for YOLO26
-YOLO_MODEL_SIZES = {
-    "nano":   ("yolo26n.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26n.pt"),
-    "small":  ("yolo26s.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26s.pt"),
-    "medium": ("yolo26m.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26m.pt"),
-    "large":  ("yolo26l.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26l.pt"),
-    "xlarge": ("yolo26x.pt", _YOLO_RELEASE_URL_PREFIX + "yolo26x.pt"),
-}
-
-LIBREYOLO_MODEL_SIZES = {
-    "tiny": ("LibreYOLO9t.pt", None),
-    "small": ("LibreYOLO9s.pt", None),
-    "medium": ("LibreYOLO9m.pt", None),
-    "compact": ("LibreYOLO9c.pt", None),
-}
-
-MODEL_SIZES_BY_BACKEND = {
-    "libreyolo": LIBREYOLO_MODEL_SIZES,
-    "ultralytics": YOLO_MODEL_SIZES,
-}
-DEFAULT_BACKEND = "libreyolo"
-# XXX this is a bit of a hack: we define the default model size here, but the actual model filename and URL are determined by the backend and the model size.
-# The CLI will use this default if no --model-size is specified and no local model is found.
-DEFAULT_MODEL_SIZE = "small"  # we do not force larger models by default; small is a good balance of speed and accuracy 
-
 import sys
 import cv2
 import numpy as np
@@ -38,41 +9,11 @@ import piexif.helper # For user comments
 from pathlib import Path
 import logging
 from typing import List, Set, Dict, Any, Optional, Tuple
-from platformdirs import user_cache_dir
 from PIL import Image, ImageOps
 
 logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff'} # Keep this
-DEFAULT_MODEL_DIR = Path(user_cache_dir("birdcrop","variance")) / "models" # use my github username as the author name
-
-
-def find_best_local_model(model_dir: Path = DEFAULT_MODEL_DIR, backend: str = DEFAULT_BACKEND) -> Tuple[str, str] | None:
-    """
-    Sucht im angegebenen Ordner nach dem besten vorhandenen YOLO-Modell.
-    Bevorzugt größere/genauere Modelle, falls mehrere existieren.
-    Rückgabe: Tuple (model_filename, model_size_key) oder None.
-    CAVEAT: Die größten Modelle sind nicht immer die besten für alle Szenarien. User sollten die Leistung
-    (Anzahl der erkannten Objekte, Genauigkeit, Rechenzeit) mit eigenen Testbildern validieren!
-    """
-    if backend not in MODEL_SIZES_BY_BACKEND:
-        raise ValueError(f"Unsupported backend: {backend}")
-    if not model_dir.is_dir():
-        return None
-    model_sizes = MODEL_SIZES_BY_BACKEND[backend]
-
-    # Präferenzreihenfolge für die automatische Erkennung vorhandener Modelle
-    preference_order = ["xlarge", "large", "compact","medium", "small", "nano", "tiny"]
-    
-    for size in preference_order:
-        if size not in model_sizes:
-            continue
-        filename, _ = model_sizes[size]
-        if (model_dir / filename).is_file():
-            return filename, size
-            
-    return None
-
 
 # Helper function to --- load and orient an image based on EXIF data ---.
 # Correct orientation is important for object detection with YOLO, as the model expects images in the correct orientation!

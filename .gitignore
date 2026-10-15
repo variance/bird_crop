@@ -8,4 +8,6 @@ dist/
 API-token*
 classes.txt
 KI\ Vorschläge*
+runs/
 weights/
+*_crop_*.jpg
