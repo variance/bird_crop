@@ -1,14 +1,18 @@
 # birdcrop/utils.py
 """Utility functions for the birdcrop library."""
 
+SCRIPT_VERSION = "0.1.1"
+SCRIPT_DATE = "2026-10-15"
+
+import logging
 import sys
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Tuple
+
 import cv2
 import numpy as np
-import piexif # Import piexif
-import piexif.helper # For user comments
-from pathlib import Path
-import logging
-from typing import List, Set, Dict, Any, Optional, Tuple
+import piexif  # Import piexif
+import piexif.helper  # For user comments
 from PIL import Image, ImageOps
 
 logger = logging.getLogger(__name__)
@@ -224,24 +228,93 @@ def find_image_files(input_paths: List[str], recursive: bool) -> List[Path]:
     logger.info(f"Found {len(sorted_files)} unique image file(s) to process.")
     return sorted_files
 
-# -------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------
+# Developer utility functions below. These are not part of the main library functionality
+# and are subject to change without notice, but can be useful for development or testing.
+# ---------------------------------------------------------------------------------------
 
 # one-shot utility to build a Windows icon from a PNG file
-def build_windows_icon(png_path: str, ico_path: str):
+def _build_windows_icon(png_path: str, ico_path: str):
     img = Image.open(png_path)
     # Erzeugt eine Multi-Resolution-ICO für Windows (16x16 bis 256x256)
     icon_sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
     img.save(ico_path, format="ICO", sizes=icon_sizes)
     print(f"Icon saved as '{ico_path}'")
 
+# -------------------------------------------------------------------------------
+
+# License stamping utility (XXX untested, but should work)
+# Alternatively, one could use, e.g., ImageMagick (Command Line): composite -gravity SouthEast -geometry +20+20 cc-logo.png input.jpg output.jpg
+def _stamp_license(main_image_path, logo_path, output_path, position="bottom-right", padding=20, logo_width=150):
+    """
+    Stamps a license logo onto an image.
+    
+    :param main_image_path: Path to the base image.
+    :param logo_path: Path to the license logo (preferably PNG with transparency).
+    :param output_path: Path where the stamped image will be saved.
+    :param position: Where to place the logo ('top-left', 'top-right', 'bottom-left', 'bottom-right').
+    :param padding: Distance in pixels from the edges.
+    :param logo_width: Target width to resize the logo (maintains aspect ratio).
+    """
+    # Open the main image and the logo
+    main_img = Image.open(main_image_path).convert("RGBA")
+    logo_img = Image.open(logo_path).convert("RGBA")
+    
+    # Resize logo maintaining aspect ratio
+    w_percent = (logo_width / float(logo_img.size[0]))
+    h_size = int((float(logo_img.size[1]) * float(w_percent)))
+    logo_img = logo_img.resize((logo_width, h_size), Image.Resampling.LANCZOS)
+    
+    # Get dimensions
+    main_w, main_h = main_img.size
+    logo_w, logo_h = logo_img.size
+    
+    # Calculate position coordinates
+    if position == "top-left":
+        x = padding
+        y = padding
+    elif position == "top-right":
+        x = main_w - logo_w - padding
+        y = padding
+    elif position == "bottom-left":
+        x = padding
+        y = main_h - logo_h - padding
+    else:  # bottom-right
+        x = main_w - logo_w - padding
+        y = main_h - logo_h - padding
+
+    # Create a transparent overlay layer
+    overlay = Image.new("RGBA", main_img.size, (0, 0, 0, 0))
+    overlay.paste(logo_img, (x, y), mask=logo_img)
+    
+    # Combine the images
+    final_img = Image.alpha_composite(main_img, overlay)
+    
+    # Convert back to RGB if saving as JPEG, or keep RGBA for PNG
+    if output_path.lower().endswith(('.jpg', '.jpeg')):
+        final_img = final_img.convert("RGB")
+        
+    final_img.save(output_path)
+    print(f"Successfully stamped image saved to: {output_path}")
+
+# -------------------------------------------------------------------------------
+
 def main():
     if len(sys.argv) == 4 and sys.argv[1] == "build_icon":
         png_path = sys.argv[2]
         ico_path = sys.argv[3]
-        build_windows_icon(png_path, ico_path)
+        _build_windows_icon(png_path, ico_path)
+        return 0
+    elif len(sys.argv) == 5 and sys.argv[1] == "stamp_license":
+        main_image_path = sys.argv[2]
+        logo_path = sys.argv[3]
+        output_path = sys.argv[4]
+        _stamp_license(main_image_path, logo_path, output_path)
         return 0
     else:
+        print(f"birdcrop/utils.py version {SCRIPT_VERSION} ({SCRIPT_DATE})")
         print("Usage: python utils.py build_icon <input_png> <output_ico>")
+        print("Usage: python utils.py stamp_license <main_image> <logo> <output>")
         return 1
     
 if __name__ == "__main__":
